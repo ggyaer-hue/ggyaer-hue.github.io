@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>실시간 팀장 경매</title>
+  <title>실시간 팀원 경매</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     body {
@@ -129,7 +129,7 @@
 </head>
 <body>
   <div class="top-bar">
-    <h1>실시간 팀장 경매</h1>
+    <h1>실시간 팀원 경매</h1>
     <div style="flex:1"></div>
     <label>
       역할 선택:
@@ -166,3 +166,56 @@
 
         <h3>현재 최고 입찰</h3>
         <p>
+          금액: <span id="highest-amount">-</span><br />
+          팀장: <span id="highest-leader">-</span>
+        </p>
+
+        <hr />
+
+        <h3>내 입찰</h3>
+        <p class="small">역할에서 팀장을 선택해야 입찰 버튼이 활성화됩니다.</p>
+        <div class="bid-input-row">
+          <input type="number" id="bid-amount" placeholder="입찰 금액" />
+          <button id="bid-button" disabled>입찰</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 오른쪽: 팀장 포인트 & 입찰 로그 -->
+    <div>
+      <div class="card">
+        <h2>팀장 포인트 (팀당 1000점)</h2>
+        <div class="leader-list">
+          <div class="leader-row">
+            <span class="name">팀장1</span>
+            <span class="points" id="points-leader1">1000 / 1000</span>
+          </div>
+          <div class="leader-row">
+            <span class="name">팀장2</span>
+            <span class="points" id="points-leader2">1000 / 1000</span>
+          </div>
+          <div class="leader-row">
+            <span class="name">팀장3</span>
+            <span class="points" id="points-leader3">1000 / 1000</span>
+          </div>
+          <div class="leader-row">
+            <span class="name">팀장4</span>
+            <span class="points" id="points-leader4">1000 / 1000</span>
+          </div>
+        </div>
+        <p class="small" style="margin-top:8px;">
+          * 사용 포인트 = 모든 선수에 대한 입찰 금액 합계<br />
+          * 남은 포인트 = 1000 - 사용 포인트
+        </p>
+      </div>
+
+      <div class="card" style="margin-top:16px;">
+        <h2>입찰 로그 (현재 선수 기준)</h2>
+        <ul id="bid-log" class="bid-log"></ul>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
