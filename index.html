@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>실시간 팀원 경매 - 스네이크 드래프트</title>
+  <title>실시간 팀원 경매</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root{
@@ -14,7 +14,6 @@
       --text:#e6edf7;
       --muted:#9fb0cc;
       --accent:#6ee7ff;
-      --accent2:#c084fc;
       --good:#22c55e;
       --warn:#eab308;
       --bad:#ef4444;
@@ -27,7 +26,6 @@
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
 
-    /* ====== 전체 3패널 레이아웃 ====== */
     .app-wrap{
       display:grid;
       grid-template-columns: 320px minmax(420px,1fr) 520px;
@@ -38,10 +36,7 @@
       .app-wrap{ grid-template-columns: 300px 1fr 460px; }
     }
     @media (max-width: 1100px){
-      .app-wrap{
-        grid-template-columns: 1fr;
-        height:auto;
-      }
+      .app-wrap{ grid-template-columns: 1fr; height:auto; }
     }
 
     .panel{
@@ -63,12 +58,12 @@
     .small{font-size:12px; color:var(--muted)}
     .hr{height:1px; background:var(--line); margin:4px 0}
 
-    /* ====== 상단 바 ====== */
     .top-bar{
       display:flex; align-items:center; gap:10px;
       padding:6px 8px; border-radius:10px;
       background:var(--panel-2);
       box-shadow:0 0 0 1px var(--line);
+      margin-bottom:10px;
     }
     .top-bar h1{font-size:18px; margin:0; font-weight:900;}
     select, input, button{
@@ -98,7 +93,7 @@
     .btn-warn{border-color:#7a5a06; background:#251a00;}
     .btn-bad{border-color:#7a1f1f; background:#2a0b0b;}
 
-    /* ====== 왼쪽: 팀 로스터 ====== */
+    /* ====== 팀 로스터 ====== */
     .team-card{
       background:var(--panel-2);
       border-radius:12px;
@@ -110,14 +105,8 @@
       display:flex; justify-content:space-between; align-items:center;
       font-weight:900;
     }
-    .team-points{
-      font-variant-numeric: tabular-nums;
-      font-weight:900; color:#ff7a7a;
-    }
-    .team-row{
-      display:flex; align-items:center; gap:8px;
-      flex-wrap:wrap;
-    }
+    .team-points{ font-weight:900; color:#ff7a7a; font-variant-numeric:tabular-nums; }
+    .team-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .slot{
       position:relative;
       width:56px; height:56px; border-radius:50%;
@@ -127,18 +116,15 @@
       overflow:hidden;
       font-size:10px; color:var(--muted);
     }
-    .slot img{
-      width:100%; height:100%; object-fit:cover;
-    }
+    .slot img{ width:100%; height:100%; object-fit:cover; }
     .slot-label{
       position:absolute; bottom:-6px; left:50%; transform:translateX(-50%);
-      background:#000a;
-      padding:2px 6px; border-radius:999px;
+      background:#000a; padding:2px 6px; border-radius:999px;
       font-size:9px; font-weight:900;
       box-shadow:0 0 0 1px #000;
     }
 
-    /* ====== 가운데: 현재 경매 ====== */
+    /* ====== 현재 경매 ====== */
     .current-card{
       background:var(--panel-2);
       border-radius:12px;
@@ -154,33 +140,24 @@
       box-shadow:0 0 0 1px var(--line);
       overflow:hidden;
     }
-    .current-photo img{
-      width:100%; height:100%; object-fit:cover;
-    }
-    .current-meta h2{
-      margin:0 0 4px 0; font-size:22px; font-weight:900;
-    }
-    .meta-line{font-size:14px; color:var(--muted); margin-top:2px;}
-    .turn-badge{
+    .current-photo img{ width:100%; height:100%; object-fit:cover; }
+    .current-meta h2{ margin:0 0 4px 0; font-size:22px; font-weight:900; }
+    .meta-line{ font-size:14px; color:var(--muted); margin-top:2px; }
+    .mode-badge{
       display:inline-flex; align-items:center; gap:6px;
-      background:#0f1730;
-      border:1px solid var(--line-2);
+      background:#0f1730; border:1px solid var(--line-2);
       padding:4px 8px; border-radius:999px;
       font-weight:900; font-size:12px;
-      box-shadow:0 0 0 1px #2a3558, 0 0 10px rgba(110,231,255,.15);
+      box-shadow:0 0 10px rgba(110,231,255,.15);
     }
 
     .status-chip{
       display:inline-flex; align-items:center; gap:6px;
       font-size:12px; font-weight:900;
     }
-    .dot{
-      width:8px; height:8px; border-radius:50%;
-      background:var(--warn);
-      box-shadow:0 0 8px rgba(234,179,8,.8);
-    }
-    .dot.bidding{ background:var(--good); box-shadow:0 0 8px rgba(34,197,94,.8);}
-    .dot.finished{ background:var(--bad); box-shadow:0 0 8px rgba(239,68,68,.8);}
+    .dot{ width:8px; height:8px; border-radius:50%; background:var(--warn); }
+    .dot.bidding{ background:var(--good); }
+    .dot.finished{ background:var(--bad); }
 
     .bid-box{
       background:var(--panel-2);
@@ -191,71 +168,41 @@
       min-height:0;
     }
     .bid-log{
-      background:#0b1020;
-      border-radius:10px;
-      padding:8px;
+      background:#0b1020; border-radius:10px; padding:8px;
       box-shadow:0 0 0 1px var(--line);
-      overflow:auto;
-      min-height:120px; max-height:260px;
-      font-size:13px;
-      line-height:1.45;
+      overflow:auto; min-height:120px; max-height:260px;
+      font-size:13px; line-height:1.45;
     }
-    .bid-log .item{margin-bottom:2px;}
-    .bid-input-row{
-      display:flex; gap:8px; align-items:center;
-    }
+    .bid-input-row{ display:flex; gap:8px; align-items:center; }
     .timer-bar{
-      background:#0b1020;
-      border-radius:10px;
+      background:#0b1020; border-radius:10px; padding:8px 10px;
       box-shadow:0 0 0 1px var(--line);
-      padding:8px 10px;
       display:flex; align-items:center; justify-content:space-between;
       font-weight:900;
     }
-    .timer-num{
-      font-size:20px; letter-spacing:1px;
-      color:#fff;
-    }
+    .timer-num{ font-size:20px; letter-spacing:1px; }
 
-    /* ====== 오른쪽: 그룹별 선수 명단 ====== */
+    /* ====== 그룹별 선수 명단 ====== */
     .group-roster-wrap{
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-      overflow:auto;
-      min-height:0;
+      display:flex; flex-direction:column; gap:10px;
+      overflow:auto; min-height:0;
     }
     .group-section{
-      background:var(--panel-2);
-      border-radius:12px;
-      padding:8px;
+      background:var(--panel-2); border-radius:12px; padding:8px;
       box-shadow:0 0 0 1px var(--line);
-      display:flex;
-      flex-direction:column;
-      gap:8px;
+      display:flex; flex-direction:column; gap:8px;
     }
     .group-header{
-      font-weight:900;
-      font-size:13px;
-      letter-spacing:.5px;
-      color:#cfe3ff;
-      background:#0f1730;
-      border:1px solid var(--line-2);
-      padding:6px 8px;
-      border-radius:8px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
+      font-weight:900; font-size:13px; letter-spacing:.5px;
+      color:#cfe3ff; background:#0f1730; border:1px solid var(--line-2);
+      padding:6px 8px; border-radius:8px;
+      display:flex; align-items:center; justify-content:space-between;
     }
     .group-list{
-      display:flex;
-      gap:8px;
-      flex-wrap:wrap;
-      min-height:52px;
-      padding-bottom:18px;
+      display:flex; gap:8px; flex-wrap:wrap;
+      min-height:52px; padding-bottom:18px;
     }
 
-    /* 아바타 카드 */
     .avatar{
       position:relative;
       width:52px; height:52px; border-radius:50%;
@@ -273,24 +220,21 @@
       position:absolute; top:-6px; right:-6px;
       font-size:9px; font-weight:900;
       padding:2px 4px; border-radius:6px;
-      background:#111827;
-      border:1px solid #334155;
+      background:#111827; border:1px solid #334155;
     }
     .badge.mvp{ background:#064e3b; color:#a7f3d0; border-color:#34d399;}
     .badge.new{ background:#78350f; color:#fde68a; border-color:#f59e0b;}
-
     .avatar .name-tip{
       position:absolute; bottom:-18px; left:50%; transform:translateX(-50%);
       font-size:10px; font-weight:900; white-space:nowrap;
-      color:#cbd5e1;
-      text-shadow:0 1px 2px #000;
+      color:#cbd5e1; text-shadow:0 1px 2px #000;
     }
   </style>
 </head>
 <body>
 
-  <div class="top-bar" style="margin-bottom:10px;">
-    <h1>실시간 팀원 경매 · 스네이크 드래프트</h1>
+  <div class="top-bar">
+    <h1>실시간 팀원 경매</h1>
     <div style="flex:1"></div>
     <label class="small" style="display:flex; align-items:center; gap:6px;">
       역할:
@@ -307,42 +251,39 @@
 
   <div class="app-wrap">
 
-    <!-- ================== LEFT: Teams ================== -->
-    <aside class="panel" id="teams-panel">
+    <!-- LEFT -->
+    <aside class="panel">
       <div class="panel-title">TEAM ROSTER <span class="small">낙찰 시 자동 이동</span></div>
-
       <div id="team-leader1" class="team-card"></div>
       <div id="team-leader2" class="team-card"></div>
       <div id="team-leader3" class="team-card"></div>
       <div id="team-leader4" class="team-card"></div>
-
-      <div class="small">* 포지션 슬롯은 TOP/JGL/MID/BOT/SUP 순서</div>
+      <div class="small">* 슬롯 순서 TOP/JGL/MID/BOT/SUP</div>
     </aside>
 
-    <!-- ================== CENTER: Current Auction ================== -->
-    <main class="panel" id="auction-panel">
+    <!-- CENTER -->
+    <main class="panel">
       <div class="panel-title">
         CURRENT AUCTION
-        <span id="room-status-chip" class="status-chip">
+        <span class="status-chip">
           <span id="room-status-dot" class="dot"></span>
           <span id="room-status-text">대기중</span>
         </span>
         <div style="flex:1"></div>
-        <span id="current-turn" class="turn-badge">-</span>
+        <span id="mode-badge" class="mode-badge">-</span>
       </div>
 
-      <!-- 운영자 전용 컨트롤 -->
       <section id="admin-controls" class="admin-box">
         <div class="panel-title" style="font-size:14px;">운영자 컨트롤</div>
         <div class="admin-row">
           <button id="btn-start-test" class="btn-warn">테스트 시작(낙찰 없음)</button>
-          <button id="btn-start-real" class="btn-good">실제 경매 시작</button>
+          <button id="btn-start-real" class="btn-good">1차 경매 시작</button>
+          <button id="btn-start-remaining" class="btn-good">잔여 선수 재경매 시작</button>
           <button id="btn-reset" class="btn-bad">포인트/로스터 리셋</button>
         </div>
         <div class="small">
-          - 테스트 시작: 턴/타이머/입찰만 연습(선수·포인트 변경 없음)<br/>
-          - 실제 시작: 자동 낙찰/팀 이동 진행<br/>
-          - 리셋: 모든 팀 포인트·로스터·선수 상태 초기화 + 입찰 로그 삭제
+          - 1차 경매: A→B→C 그룹 순서로 자동 진행<br/>
+          - 잔여 재경매: sold 안 된 선수만 모아서 다시 진행
         </div>
       </section>
 
@@ -379,33 +320,29 @@
         <div class="bid-input-row">
           <input type="number" id="bid-amount" placeholder="입찰 금액" />
           <button id="bid-button" disabled>입찰</button>
-          <span class="small" id="bid-hint">내 턴일 때만 입찰 가능</span>
+          <span class="small">실시간 경매(턴 없음)</span>
         </div>
       </section>
     </main>
 
-    <!-- ================== RIGHT: Roster (GROUP BASED) ================== -->
-    <aside class="panel" id="roster-panel">
+    <!-- RIGHT -->
+    <aside class="panel">
       <div class="panel-title">PLAYER LIST <span class="small">그룹별 명단</span></div>
-
       <div class="group-roster-wrap">
         <section class="group-section">
           <div class="group-header">A GROUP</div>
           <div class="group-list" id="roster-A"></div>
         </section>
-
         <section class="group-section">
           <div class="group-header">B GROUP</div>
           <div class="group-list" id="roster-B"></div>
         </section>
-
         <section class="group-section">
           <div class="group-header">C GROUP</div>
           <div class="group-list" id="roster-C"></div>
         </section>
       </div>
-
-      <div class="small">* sold는 회색 처리 / 현재 경매 선수는 초록 강조</div>
+      <div class="small">* sold 회색 / 현재 경매 초록</div>
     </aside>
 
   </div>
