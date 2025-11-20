@@ -249,14 +249,14 @@ onSnapshot(collection(db,"rooms",ROOM_ID,"players"), (snap)=>{
     playersMap.set(d.id,p); allPlayers.push(p);
   });
   renderRosterByGroup(allPlayers, currentPlayerId);
-  renderTeams();
+  renderTeams();                 // ✅ TEAM ROSTER 갱신
   renderCurrentPlayer(currentPlayerId);
 });
 
 onSnapshot(collection(db,"rooms",ROOM_ID,"teams"), (snap)=>{
   teamsMap=new Map();
   snap.forEach(d=>teamsMap.set(d.id, {id:d.id, ...d.data()}));
-  renderTeams();
+  renderTeams();                 // ✅ TEAM ROSTER 갱신
   updateBidButtonState();
 });
 
@@ -305,6 +305,7 @@ async function renderCurrentPlayer(pid){
   currentBio.textContent=p.bio || "-";
 }
 
+/* ✅ TEAM ROSTER: 이름 + 낙찰가 표시 */
 function renderTeams(){
   const byId=(id)=>playersMap.get(id);
 
@@ -318,13 +319,24 @@ function renderTeams(){
     const remain=start-used;
 
     const roster=team?.roster || {};
+
     const slotsHtml=ROLES.map(role=>{
       const pid=roster[role] || null;
       const p=pid ? byId(pid) : null;
-      const img=p?.photoUrl ? `<img src="${p.photoUrl}"/>` : "";
+
+      const hasPlayer = !!p;
+      const nameText = hasPlayer ? (p.name || pid) : role;
+      const priceText = hasPlayer && p.finalPrice ? `${p.finalPrice}점` : "";
+
+      const imgHtml = p?.photoUrl ? `<img src="${p.photoUrl}" />` : "";
+
       return `
-        <div class="slot" title="${p?.name||role}">
-          ${img || role}
+        <div class="slot ${hasPlayer ? "" : "empty"}" title="${p?.name||role}">
+          ${imgHtml}
+          <div class="slot-text">
+            <div class="slot-name">${nameText}</div>
+            ${priceText ? `<div class="slot-price">${priceText}</div>` : ""}
+          </div>
           <div class="slot-label">${role}</div>
         </div>
       `;
@@ -412,8 +424,7 @@ function updateBidButtonState(){
   if(!isLeader || !roomData || roomData.status!=="bidding"){
     bidButton.disabled=true; bidInput.disabled=true; return;
   }
-  // TURN 없음 → bidding이면 모두 입찰 가능
-  bidButton.disabled=false; bidInput.disabled=false;
+  bidButton.disabled=false; bidInput.disabled=false; // TURN 없음
 }
 
 /* ===================== 입찰 ===================== */
@@ -451,7 +462,7 @@ bidButton.addEventListener("click", async ()=>{
     bidInput.value="";
   }catch(e){
     console.error(e);
-    alert("입찰 오류");
+    alert("입찰 오류: " + (e.message || e.code));
   }
 });
 
@@ -538,7 +549,7 @@ async function finalizeRound(){
     const player=playerSnap.data();
     const role=(player.role||"TOP").toUpperCase();
 
-    // 선수 sold
+    // 선수 sold + finalPrice 저장
     tx.update(playerRef,{
       status:"sold",
       assignedTeamId:winnerLeaderId,
@@ -573,7 +584,6 @@ async function finalizeRound(){
 }
 
 /* ===================== 다음 선수 선택 ===================== */
-// remainingAuction이면 remainingQueue 순서로 진행
 async function getNextPlayer(tx, room){
   const isRemain = !!room.remainingAuction;
   if(isRemain){
@@ -581,14 +591,13 @@ async function getNextPlayer(tx, room){
     const idx = (room.remainingIndex ?? 0) + 1;
     const nextId = queue[idx];
 
-    if(!nextId) return null; // 큐 끝
+    if(!nextId) return null;
     tx.update(doc(db,"rooms",ROOM_ID),{ remainingIndex: idx });
     const snap = await tx.get(doc(db,"rooms",ROOM_ID,"players",nextId));
     if(!snap.exists()) return null;
     return { id:snap.id, ...snap.data() };
   }
 
-  // MAIN 모드: 현재 그룹에서 다음 available 찾고 없으면 다음 그룹으로 넘어감
   let group = (room.currentGroup || "A").toUpperCase();
   let groupIdx = GROUP_ORDER.indexOf(group);
   if(groupIdx<0) groupIdx=0;
@@ -604,10 +613,8 @@ async function getNextPlayer(tx, room){
       return a.id.localeCompare(b.id);
     })[0] || null;
 
-  // 같은 그룹에서 다음 찾기
   let next = findInGroup(group);
 
-  // 없으면 다음 그룹으로 이동
   while(!next && groupIdx < GROUP_ORDER.length-1){
     groupIdx++;
     group = GROUP_ORDER[groupIdx];
