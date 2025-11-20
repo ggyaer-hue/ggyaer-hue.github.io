@@ -202,45 +202,48 @@
       color:#fff;
     }
 
-    /* ====== 오른쪽: 선수 명단 ====== */
-    .roster-tabs{
-      display:flex; gap:6px; align-items:center; flex-wrap:wrap;
+    /* ====== 오른쪽: 그룹별 선수 명단 ====== */
+    .group-roster-wrap{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      overflow:auto;
+      min-height:0;
     }
-    .roster-tabs .tab{
-      background:#0f1730; border:1px solid var(--line-2);
-      padding:6px 10px; border-radius:8px; font-weight:900;
+    .group-section{
+      background:var(--panel-2);
+      border-radius:12px;
+      padding:8px;
+      box-shadow:0 0 0 1px var(--line);
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .group-header{
+      font-weight:900;
+      font-size:13px;
+      letter-spacing:.5px;
       color:#cfe3ff;
+      background:#0f1730;
+      border:1px solid var(--line-2);
+      padding:6px 8px;
+      border-radius:8px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
     }
-    .roster-tabs .tab.active{
-      border-color:var(--accent);
-      box-shadow:0 0 14px rgba(110,231,255,.4);
-      background:linear-gradient(90deg,#2ed3ff33,#a855f733);
+    .group-list{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      min-height:52px;
+      padding-bottom:18px;
     }
 
-    .role-row{
-      display:grid;
-      grid-template-columns: 52px 1fr;
-      gap:8px;
-      align-items:center;
-    }
-    .role-label{
-      background:#0f1730; border-radius:8px;
-      box-shadow:0 0 0 1px var(--line-2);
-      font-weight:900; font-size:12px;
-      color:#7dd3fc;
-      display:flex; align-items:center; justify-content:center;
-      height:44px;
-    }
-    .role-list{
-      display:flex; gap:8px; flex-wrap:wrap;
-      background:var(--panel-2);
-      padding:6px; border-radius:10px;
-      box-shadow:0 0 0 1px var(--line);
-      min-height:44px;
-    }
+    /* 아바타 카드(명단/슬롯 공통 느낌) */
     .avatar{
       position:relative;
-      width:44px; height:44px; border-radius:50%;
+      width:52px; height:52px; border-radius:50%;
       background:#0b1020;
       box-shadow:0 0 0 2px #2b375a inset, 0 0 6px rgba(0,0,0,.8);
       overflow:hidden;
@@ -265,6 +268,7 @@
       position:absolute; bottom:-18px; left:50%; transform:translateX(-50%);
       font-size:10px; font-weight:900; white-space:nowrap;
       color:#cbd5e1;
+      text-shadow:0 1px 2px #000;
     }
   </style>
 </head>
@@ -349,46 +353,25 @@
       </section>
     </main>
 
-    <!-- ================== RIGHT: Roster ================== -->
+    <!-- ================== RIGHT: Roster (GROUP BASED) ================== -->
     <aside class="panel" id="roster-panel">
-      <div class="panel-title">PLAYER LIST <span class="small">그룹/포지션별</span></div>
+      <div class="panel-title">PLAYER LIST <span class="small">그룹별 명단</span></div>
 
-      <div class="roster-tabs">
-        <button class="tab active" data-group="A">A GROUP</button>
-        <button class="tab" data-group="B">B GROUP</button>
-        <button class="tab" data-group="C">C GROUP</button>
-      </div>
+      <div class="group-roster-wrap">
+        <section class="group-section">
+          <div class="group-header">A GROUP</div>
+          <div class="group-list" id="roster-A"></div>
+        </section>
 
-      <div class="hr"></div>
+        <section class="group-section">
+          <div class="group-header">B GROUP</div>
+          <div class="group-list" id="roster-B"></div>
+        </section>
 
-      <div class="role-row">
-        <div class="role-label">TOP</div>
-        <div class="role-list" id="roster-TOP"></div>
-      </div>
-
-      <div class="role-row">
-        <div class="role-label">JGL</div>
-        <div class="role-list" id="roster-JGL"></div>
-      </div>
-
-      <div class="role-row">
-        <div class="role-label">MID</div>
-        <div class="role-list" id="roster-MID"></div>
-      </div>
-
-      <div class="role-row">
-        <div class="role-label">BOT</div>
-        <div class="role-list" id="roster-BOT"></div>
-      </div>
-
-      <div class="role-row">
-        <div class="role-label">SUP</div>
-        <div class="role-list" id="roster-SUP"></div>
-      </div>
-
-      <div class="role-row">
-        <div class="role-label">COACH</div>
-        <div class="role-list" id="roster-COACH"></div>
+        <section class="group-section">
+          <div class="group-header">C GROUP</div>
+          <div class="group-list" id="roster-C"></div>
+        </section>
       </div>
 
       <div class="small">* sold는 회색 처리 / 현재 경매 선수는 초록 강조</div>
