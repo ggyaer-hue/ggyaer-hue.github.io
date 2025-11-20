@@ -83,6 +83,21 @@
     button{cursor:pointer; font-weight:700;}
     button:disabled{opacity:.5; cursor:not-allowed;}
 
+    /* ====== 운영자 컨트롤 ====== */
+    .admin-box{
+      background:var(--panel-2);
+      border-radius:12px;
+      padding:10px;
+      box-shadow:0 0 0 1px var(--line);
+      display:none;
+      flex-direction:column;
+      gap:8px;
+    }
+    .admin-row{display:flex; gap:8px; flex-wrap:wrap;}
+    .btn-good{border-color:#1f6f46; background:#0b2c1c;}
+    .btn-warn{border-color:#7a5a06; background:#251a00;}
+    .btn-bad{border-color:#7a1f1f; background:#2a0b0b;}
+
     /* ====== 왼쪽: 팀 로스터 ====== */
     .team-card{
       background:var(--panel-2);
@@ -152,7 +167,7 @@
       border:1px solid var(--line-2);
       padding:4px 8px; border-radius:999px;
       font-weight:900; font-size:12px;
-      box-shadow:0 0 10px rgba(110,231,255,.15);
+      box-shadow:0 0 0 1px #2a3558, 0 0 10px rgba(110,231,255,.15);
     }
 
     .status-chip{
@@ -240,7 +255,7 @@
       padding-bottom:18px;
     }
 
-    /* 아바타 카드(명단/슬롯 공통 느낌) */
+    /* 아바타 카드 */
     .avatar{
       position:relative;
       width:52px; height:52px; border-radius:50%;
@@ -285,6 +300,7 @@
         <option value="leader2">팀장2</option>
         <option value="leader3">팀장3</option>
         <option value="leader4">팀장4</option>
+        <option value="operator">운영자</option>
       </select>
     </label>
   </div>
@@ -314,6 +330,21 @@
         <div style="flex:1"></div>
         <span id="current-turn" class="turn-badge">-</span>
       </div>
+
+      <!-- 운영자 전용 컨트롤 -->
+      <section id="admin-controls" class="admin-box">
+        <div class="panel-title" style="font-size:14px;">운영자 컨트롤</div>
+        <div class="admin-row">
+          <button id="btn-start-test" class="btn-warn">테스트 시작(낙찰 없음)</button>
+          <button id="btn-start-real" class="btn-good">실제 경매 시작</button>
+          <button id="btn-reset" class="btn-bad">포인트/로스터 리셋</button>
+        </div>
+        <div class="small">
+          - 테스트 시작: 턴/타이머/입찰만 연습(선수·포인트 변경 없음)<br/>
+          - 실제 시작: 자동 낙찰/팀 이동 진행<br/>
+          - 리셋: 모든 팀 포인트·로스터·선수 상태 초기화 + 입찰 로그 삭제
+        </div>
+      </section>
 
       <section class="current-card">
         <div class="current-photo">
