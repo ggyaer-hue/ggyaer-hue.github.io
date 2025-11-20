@@ -2,137 +2,279 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>실시간 팀원 경매</title>
+  <title>실시간 팀원 경매 - 스네이크 드래프트</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      margin: 0;
-      padding: 16px;
-      background: #0b1020;
-      color: #f5f5f5;
+    :root{
+      --bg:#0b1020;
+      --panel:#11162a;
+      --panel-2:#0f1427;
+      --line:#23314f;
+      --line-2:#2a3558;
+      --text:#e6edf7;
+      --muted:#9fb0cc;
+      --accent:#6ee7ff;
+      --accent2:#c084fc;
+      --good:#22c55e;
+      --warn:#eab308;
+      --bad:#ef4444;
     }
-    h1 {
-      margin-top: 0;
-      font-size: 24px;
+    *{box-sizing:border-box}
+    body{
+      margin:0; padding:12px;
+      background:var(--bg);
+      color:var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
-    .top-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-      margin-bottom: 16px;
+
+    /* ====== 전체 3패널 레이아웃 ====== */
+    .app-wrap{
+      display:grid;
+      grid-template-columns: 320px minmax(420px,1fr) 520px;
+      gap:12px;
+      height: calc(100vh - 24px);
     }
-    select, input, button {
-      padding: 6px 10px;
-      border-radius: 6px;
-      border: 1px solid #333;
-      background: #141827;
-      color: #f5f5f5;
+    @media (max-width: 1400px){
+      .app-wrap{ grid-template-columns: 300px 1fr 460px; }
     }
-    button {
-      cursor: pointer;
-    }
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    .layout {
-      display: grid;
-      grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr);
-      gap: 16px;
-    }
-    @media (max-width: 900px) {
-      .layout {
+    @media (max-width: 1100px){
+      .app-wrap{
         grid-template-columns: 1fr;
+        height:auto;
       }
     }
-    .card {
-      background: #141827;
-      border-radius: 12px;
-      padding: 16px;
-      box-shadow: 0 0 0 1px #232842;
+
+    .panel{
+      background:var(--panel);
+      border-radius:14px;
+      box-shadow:0 0 0 1px var(--line);
+      padding:12px;
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      min-height:0;
     }
-    .card h2 {
-      margin-top: 0;
-      font-size: 18px;
-      margin-bottom: 8px;
+    .panel-title{
+      display:flex; align-items:center; gap:8px;
+      font-weight:900; letter-spacing:.5px;
+      font-size:16px;
     }
-    .player-name {
-      font-size: 20px;
-      font-weight: bold;
+    .small{font-size:12px; color:var(--muted)}
+    .hr{height:1px; background:var(--line); margin:4px 0}
+
+    /* ====== 상단 바 ====== */
+    .top-bar{
+      display:flex; align-items:center; gap:10px;
+      padding:6px 8px; border-radius:10px;
+      background:var(--panel-2);
+      box-shadow:0 0 0 1px var(--line);
     }
-    .badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 12px;
-      background: #23314f;
-      margin-left: 4px;
+    .top-bar h1{font-size:18px; margin:0; font-weight:900;}
+    select, input, button{
+      background:#0f1730;
+      border:1px solid var(--line-2);
+      color:var(--text);
+      padding:6px 8px;
+      border-radius:8px;
+      font-size:14px;
+      outline:none;
     }
-    .timer {
-      font-size: 18px;
-      font-weight: bold;
+    button{cursor:pointer; font-weight:700;}
+    button:disabled{opacity:.5; cursor:not-allowed;}
+
+    /* ====== 왼쪽: 팀 로스터 ====== */
+    .team-card{
+      background:var(--panel-2);
+      border-radius:12px;
+      padding:10px;
+      box-shadow:0 0 0 1px var(--line);
+      display:flex; flex-direction:column; gap:8px;
     }
-    .leader-list {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
+    .team-header{
+      display:flex; justify-content:space-between; align-items:center;
+      font-weight:900;
     }
-    .leader-row {
-      display: flex;
-      justify-content: space-between;
-      font-size: 14px;
-    }
-    .leader-row span.name {
-      font-weight: 600;
-    }
-    .leader-row span.points {
+    .team-points{
       font-variant-numeric: tabular-nums;
+      font-weight:900; color:#ff7a7a;
     }
-    .bid-input-row {
-      display: flex;
-      gap: 8px;
-      margin-top: 8px;
+    .team-row{
+      display:flex; align-items:center; gap:8px;
+      flex-wrap:wrap;
     }
-    .bid-log {
-      max-height: 260px;
-      overflow-y: auto;
-      margin: 0;
-      padding-left: 18px;
-      font-size: 13px;
+    .slot{
+      position:relative;
+      width:56px; height:56px; border-radius:50%;
+      background:#0b1020;
+      box-shadow:0 0 0 2px #2b375a inset, 0 0 0 1px #000;
+      display:flex; align-items:center; justify-content:center;
+      overflow:hidden;
+      font-size:10px; color:var(--muted);
     }
-    .bid-log li {
-      margin-bottom: 2px;
+    .slot img{
+      width:100%; height:100%; object-fit:cover;
     }
-    .status-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      margin-right: 4px;
+    .slot-label{
+      position:absolute; bottom:-6px; left:50%; transform:translateX(-50%);
+      background:#000a;
+      padding:2px 6px; border-radius:999px;
+      font-size:9px; font-weight:900;
+      box-shadow:0 0 0 1px #000;
     }
-    .status-bidding {
-      background: #22c55e;
+
+    /* ====== 가운데: 현재 경매 ====== */
+    .current-card{
+      background:var(--panel-2);
+      border-radius:12px;
+      padding:12px;
+      box-shadow:0 0 0 1px var(--line);
+      display:grid;
+      grid-template-columns: 160px 1fr;
+      gap:12px;
     }
-    .status-waiting {
-      background: #eab308;
+    .current-photo{
+      width:160px; height:160px; border-radius:12px;
+      background:#0b1020;
+      box-shadow:0 0 0 1px var(--line);
+      overflow:hidden;
     }
-    .status-finished {
-      background: #ef4444;
+    .current-photo img{
+      width:100%; height:100%; object-fit:cover;
     }
-    .small {
-      font-size: 12px;
-      opacity: 0.7;
+    .current-meta h2{
+      margin:0 0 4px 0; font-size:22px; font-weight:900;
+    }
+    .meta-line{font-size:14px; color:var(--muted); margin-top:2px;}
+    .turn-badge{
+      display:inline-flex; align-items:center; gap:6px;
+      background:#0f1730;
+      border:1px solid var(--line-2);
+      padding:4px 8px; border-radius:999px;
+      font-weight:900; font-size:12px;
+      box-shadow:0 0 10px rgba(110,231,255,.15);
+    }
+
+    .status-chip{
+      display:inline-flex; align-items:center; gap:6px;
+      font-size:12px; font-weight:900;
+    }
+    .dot{
+      width:8px; height:8px; border-radius:50%;
+      background:var(--warn);
+      box-shadow:0 0 8px rgba(234,179,8,.8);
+    }
+    .dot.bidding{ background:var(--good); box-shadow:0 0 8px rgba(34,197,94,.8);}
+    .dot.finished{ background:var(--bad); box-shadow:0 0 8px rgba(239,68,68,.8);}
+
+    .bid-box{
+      background:var(--panel-2);
+      border-radius:12px;
+      padding:10px;
+      box-shadow:0 0 0 1px var(--line);
+      display:flex; flex-direction:column; gap:8px;
+      min-height:0;
+    }
+    .bid-log{
+      background:#0b1020;
+      border-radius:10px;
+      padding:8px;
+      box-shadow:0 0 0 1px var(--line);
+      overflow:auto;
+      min-height:120px; max-height:260px;
+      font-size:13px;
+      line-height:1.45;
+    }
+    .bid-log .item{margin-bottom:2px;}
+    .bid-input-row{
+      display:flex; gap:8px; align-items:center;
+    }
+    .timer-bar{
+      background:#0b1020;
+      border-radius:10px;
+      box-shadow:0 0 0 1px var(--line);
+      padding:8px 10px;
+      display:flex; align-items:center; justify-content:space-between;
+      font-weight:900;
+    }
+    .timer-num{
+      font-size:20px; letter-spacing:1px;
+      color:#fff;
+    }
+
+    /* ====== 오른쪽: 선수 명단 ====== */
+    .roster-tabs{
+      display:flex; gap:6px; align-items:center; flex-wrap:wrap;
+    }
+    .roster-tabs .tab{
+      background:#0f1730; border:1px solid var(--line-2);
+      padding:6px 10px; border-radius:8px; font-weight:900;
+      color:#cfe3ff;
+    }
+    .roster-tabs .tab.active{
+      border-color:var(--accent);
+      box-shadow:0 0 14px rgba(110,231,255,.4);
+      background:linear-gradient(90deg,#2ed3ff33,#a855f733);
+    }
+
+    .role-row{
+      display:grid;
+      grid-template-columns: 52px 1fr;
+      gap:8px;
+      align-items:center;
+    }
+    .role-label{
+      background:#0f1730; border-radius:8px;
+      box-shadow:0 0 0 1px var(--line-2);
+      font-weight:900; font-size:12px;
+      color:#7dd3fc;
+      display:flex; align-items:center; justify-content:center;
+      height:44px;
+    }
+    .role-list{
+      display:flex; gap:8px; flex-wrap:wrap;
+      background:var(--panel-2);
+      padding:6px; border-radius:10px;
+      box-shadow:0 0 0 1px var(--line);
+      min-height:44px;
+    }
+    .avatar{
+      position:relative;
+      width:44px; height:44px; border-radius:50%;
+      background:#0b1020;
+      box-shadow:0 0 0 2px #2b375a inset, 0 0 6px rgba(0,0,0,.8);
+      overflow:hidden;
+      flex:0 0 auto;
+    }
+    .avatar img{width:100%; height:100%; object-fit:cover;}
+    .avatar.sold{opacity:.35; filter:grayscale(1);}
+    .avatar.current{
+      box-shadow:0 0 0 2px var(--good), 0 0 0 4px #86efac, 0 0 16px rgba(34,197,94,.8);
+    }
+    .avatar .badge{
+      position:absolute; top:-6px; right:-6px;
+      font-size:9px; font-weight:900;
+      padding:2px 4px; border-radius:6px;
+      background:#111827;
+      border:1px solid #334155;
+    }
+    .badge.mvp{ background:#064e3b; color:#a7f3d0; border-color:#34d399;}
+    .badge.new{ background:#78350f; color:#fde68a; border-color:#f59e0b;}
+
+    .avatar .name-tip{
+      position:absolute; bottom:-18px; left:50%; transform:translateX(-50%);
+      font-size:10px; font-weight:900; white-space:nowrap;
+      color:#cbd5e1;
     }
   </style>
 </head>
 <body>
-  <div class="top-bar">
-    <h1>실시간 팀원 경매</h1>
+
+  <div class="top-bar" style="margin-bottom:10px;">
+    <h1>실시간 팀원 경매 · 스네이크 드래프트</h1>
     <div style="flex:1"></div>
-    <label>
-      역할 선택:
+    <label class="small" style="display:flex; align-items:center; gap:6px;">
+      역할:
       <select id="role-select">
         <option value="viewer">관전(읽기전용)</option>
         <option value="leader1">팀장1</option>
@@ -143,77 +285,115 @@
     </label>
   </div>
 
-  <div class="layout">
-    <!-- 왼쪽: 현재 선수 / 입찰 -->
-    <div>
-      <div class="card">
-        <h2>현재 선수</h2>
-        <div id="room-status">
-          <span id="room-status-dot" class="status-dot status-waiting"></span>
+  <div class="app-wrap">
+
+    <!-- ================== LEFT: Teams ================== -->
+    <aside class="panel" id="teams-panel">
+      <div class="panel-title">TEAM ROSTER <span class="small">낙찰 시 자동 이동</span></div>
+
+      <div id="team-leader1" class="team-card"></div>
+      <div id="team-leader2" class="team-card"></div>
+      <div id="team-leader3" class="team-card"></div>
+      <div id="team-leader4" class="team-card"></div>
+
+      <div class="small">* 포지션 슬롯은 TOP/JGL/MID/BOT/SUP 순서</div>
+    </aside>
+
+    <!-- ================== CENTER: Current Auction ================== -->
+    <main class="panel" id="auction-panel">
+      <div class="panel-title">
+        CURRENT AUCTION
+        <span id="room-status-chip" class="status-chip">
+          <span id="room-status-dot" class="dot"></span>
           <span id="room-status-text">대기중</span>
+        </span>
+        <div style="flex:1"></div>
+        <span id="current-turn" class="turn-badge">-</span>
+      </div>
+
+      <section class="current-card">
+        <div class="current-photo">
+          <img id="current-player-photo" src="" alt="player" />
         </div>
-        <p class="player-name" id="player-name">-</p>
-        <p>
-          기본가: <span id="player-base">-</span><br />
-          상태: <span id="player-status">-</span>
-        </p>
-        <p>
-          남은 시간: <span class="timer" id="timer">-</span>
-          <span class="small">(타이머는 예시 텍스트입니다)</span>
-        </p>
+        <div class="current-meta">
+          <h2 id="current-player-name">-</h2>
+          <div class="meta-line">
+            포지션: <span id="current-player-role">-</span> /
+            그룹: <span id="current-player-group">-</span>
+          </div>
+          <div class="meta-line">기본가: <span id="current-player-base">-</span></div>
+          <div class="meta-line">상태: <span id="current-player-status">-</span></div>
+          <div class="meta-line" id="current-player-bio">-</div>
+        </div>
+      </section>
 
-        <hr />
+      <section class="timer-bar">
+        <div>TIME COUNT</div>
+        <div class="timer-num"><span id="timer">-</span>s</div>
+      </section>
 
-        <h3>현재 최고 입찰</h3>
-        <p>
-          금액: <span id="highest-amount">-</span><br />
-          팀장: <span id="highest-leader">-</span>
-        </p>
+      <section class="bid-box">
+        <div class="panel-title" style="font-size:14px;">
+          입찰 로그
+          <div style="flex:1"></div>
+          최고가: <span id="highest-amount">-</span> /
+          <span id="highest-leader">-</span>
+        </div>
+        <div id="bid-log" class="bid-log"></div>
 
-        <hr />
-
-        <h3>내 입찰</h3>
-        <p class="small">역할에서 팀장을 선택해야 입찰 버튼이 활성화됩니다.</p>
         <div class="bid-input-row">
           <input type="number" id="bid-amount" placeholder="입찰 금액" />
           <button id="bid-button" disabled>입찰</button>
+          <span class="small" id="bid-hint">내 턴일 때만 입찰 가능</span>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
 
-    <!-- 오른쪽: 팀장 포인트 & 입찰 로그 -->
-    <div>
-      <div class="card">
-        <h2>팀장 포인트 (팀당 1000점)</h2>
-        <div class="leader-list">
-          <div class="leader-row">
-            <span class="name">팀장1</span>
-            <span class="points" id="points-leader1">1000 / 1000</span>
-          </div>
-          <div class="leader-row">
-            <span class="name">팀장2</span>
-            <span class="points" id="points-leader2">1000 / 1000</span>
-          </div>
-          <div class="leader-row">
-            <span class="name">팀장3</span>
-            <span class="points" id="points-leader3">1000 / 1000</span>
-          </div>
-          <div class="leader-row">
-            <span class="name">팀장4</span>
-            <span class="points" id="points-leader4">1000 / 1000</span>
-          </div>
-        </div>
-        <p class="small" style="margin-top:8px;">
-          * 사용 포인트 = 모든 선수에 대한 입찰 금액 합계<br />
-          * 남은 포인트 = 1000 - 사용 포인트
-        </p>
+    <!-- ================== RIGHT: Roster ================== -->
+    <aside class="panel" id="roster-panel">
+      <div class="panel-title">PLAYER LIST <span class="small">그룹/포지션별</span></div>
+
+      <div class="roster-tabs">
+        <button class="tab active" data-group="A">A GROUP</button>
+        <button class="tab" data-group="B">B GROUP</button>
+        <button class="tab" data-group="C">C GROUP</button>
       </div>
 
-      <div class="card" style="margin-top:16px;">
-        <h2>입찰 로그 (현재 선수 기준)</h2>
-        <ul id="bid-log" class="bid-log"></ul>
+      <div class="hr"></div>
+
+      <div class="role-row">
+        <div class="role-label">TOP</div>
+        <div class="role-list" id="roster-TOP"></div>
       </div>
-    </div>
+
+      <div class="role-row">
+        <div class="role-label">JGL</div>
+        <div class="role-list" id="roster-JGL"></div>
+      </div>
+
+      <div class="role-row">
+        <div class="role-label">MID</div>
+        <div class="role-list" id="roster-MID"></div>
+      </div>
+
+      <div class="role-row">
+        <div class="role-label">BOT</div>
+        <div class="role-list" id="roster-BOT"></div>
+      </div>
+
+      <div class="role-row">
+        <div class="role-label">SUP</div>
+        <div class="role-list" id="roster-SUP"></div>
+      </div>
+
+      <div class="role-row">
+        <div class="role-label">COACH</div>
+        <div class="role-list" id="roster-COACH"></div>
+      </div>
+
+      <div class="small">* sold는 회색 처리 / 현재 경매 선수는 초록 강조</div>
+    </aside>
+
   </div>
 
   <script type="module" src="./app.js"></script>
