@@ -1,6 +1,8 @@
 // app.js (FINAL ONE-PASTE VERSION)
 // REAL-TIME AUCTION + MAIN(A→B→C) + REMAINING RE-AUCTION
 // TEAM ROSTER name + price
+// Role normalize + 5-step bidding + safe finalize + Timestamp/number endsAt support
+
 import { firebaseConfig } from "./firebase-config.js";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
@@ -40,6 +42,19 @@ function normalizeRole(r){
   if (["SUP","S","SUPPORT","서폿","서포터","서포트"].includes(s)) return "SUP";
 
   return s || "TOP";
+}
+
+/* ===================== roundEndsAt 변환 (Timestamp/number 모두 지원) ===================== */
+function toMillis(v){
+  if(!v) return null;
+  if(typeof v === "number") return v;
+  if(v instanceof Date) return v.getTime();
+  if(typeof v.toMillis === "function") return v.toMillis(); // Firestore Timestamp
+  if(v.seconds != null) {
+    return v.seconds * 1000 + Math.floor((v.nanoseconds || 0) / 1e6);
+  }
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 /* ===================== DOM ===================== */
@@ -129,6 +144,7 @@ async function adminStartMainAuction(testMode){
       currentGroup: group,
       currentPlayerId: firstPlayer?.id || null,
       roundId: (room.roundId ?? 0) + 1,
+      // 숫자(ms)로 저장
       roundEndsAt: Date.now() + ROUND_SECONDS*1000,
     });
 
@@ -178,6 +194,7 @@ async function adminStartRemainingAuction(){
       currentGroup: "REMAIN",
       currentPlayerId: remain[0].id,
       roundId: (room.roundId ?? 0) + 1,
+      // 숫자(ms)로 저장
       roundEndsAt: Date.now() + ROUND_SECONDS*1000,
     });
 
@@ -265,8 +282,9 @@ onSnapshot(roomRef, async (snap)=>{
   renderRosterByGroup(allPlayers, currentPlayerId);
   startTimerIfNeeded(roomData);
 
-  // ✅ 시간이 지나면 어떤 클라이언트든 자동 finalize
-  if (roomData.status === "bidding" && roomData.roundEndsAt && roomData.roundEndsAt <= Date.now()) {
+  // ✅ endsAt이 Timestamp여도 숫자여도 자동 finalize
+  const endsAtMs = toMillis(roomData.roundEndsAt);
+  if (roomData.status === "bidding" && endsAtMs && endsAtMs <= Date.now()) {
     safeFinalize();
   }
 });
@@ -488,13 +506,19 @@ function updateBidButtonState(){
   bidInput.disabled=false; // TURN 없음 → 전원 입찰 가능
 }
 
-/* ===================== 입찰 ===================== */
+/* ===================== 입찰 (5단위 강제) ===================== */
 bidButton.addEventListener("click", async ()=>{
   if(!roomData || roomData.status!=="bidding" || !currentPlayerId) return;
 
   const amount=Number(bidInput.value);
   if(!amount || amount<=0){
     alert("입찰 금액 입력");
+    return;
+  }
+
+  // ✅ 5단위만 허용
+  if (amount % 5 !== 0) {
+    alert("입찰은 5점 단위로만 가능합니다. (예: 5, 10, 15...)");
     return;
   }
 
@@ -514,15 +538,20 @@ bidButton.addEventListener("click", async ()=>{
   }
 
   const p=playersMap.get(currentPlayerId);
-  const base=p?.basePrice ?? 0;
-  const currentMax=Number(highestAmountSpan.textContent)||0;
+  const baseRaw = Number(p?.basePrice ?? 0);
+  const currentMax = Number(highestAmountSpan.textContent) || 0;
 
-  if(amount<base){
-    alert(`기본가(${base}) 이상으로`);
+  // 기본가도 5단위 올림 처리
+  let minBid = baseRaw;
+  if (minBid % 5 !== 0) minBid = Math.ceil(minBid / 5) * 5;
+
+  if(amount < minBid){
+    alert(`기본가(${baseRaw}) 이상(5단위 적용 최소 ${minBid}점부터)으로 입찰하세요.`);
     return;
   }
-  if(currentMax && amount<=currentMax){
-    alert(`최고가(${currentMax})보다 높게`);
+
+  if(currentMax && amount < currentMax + 5){
+    alert(`최고가(${currentMax})보다 최소 5점 높게 입찰해야 합니다.`);
     return;
   }
 
@@ -572,7 +601,12 @@ function startTimerIfNeeded(d){
     stopTimer();
     return;
   }
-  startTimerFromEndsAt(d.roundEndsAt);
+  const endsAtMs = toMillis(d.roundEndsAt);
+  if(!endsAtMs){
+    stopTimer();
+    return;
+  }
+  startTimerFromEndsAt(endsAtMs);
 }
 
 /* ===================== finalize 안전 래퍼 ===================== */
@@ -581,6 +615,9 @@ async function safeFinalize(){
   finalizeInFlight = true;
   try{
     await finalizeRound();
+  } catch(e){
+    console.error(e);
+    alert("Finalize 실패: " + (e.message || e.code));
   } finally {
     finalizeInFlight = false;
   }
