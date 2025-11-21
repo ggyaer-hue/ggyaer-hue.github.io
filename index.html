@@ -64,11 +64,15 @@
     /* ====== MAIN LAYOUT ====== */
     .wrap{
       display:grid;
-      grid-template-columns: 1.05fr 0.8fr 1.6fr;
+      grid-template-columns: 1.05fr 0.9fr 1.6fr; /* 가운데 조금 넓힘 */
       gap:10px; padding:10px;
       height:calc(100vh - 56px);
     }
-    .col{display:flex; flex-direction:column; gap:10px; min-height:0;}
+    .col{
+      display:flex; flex-direction:column; gap:10px;
+      min-height:0; /* 중요: 자식 flex-grow 정상 작동 */
+    }
+
     .panel{
       background:var(--panel);
       border:1px solid var(--line);
@@ -83,8 +87,16 @@
       margin-bottom:8px;
     }
 
-    /* ====== LEFT: TEAMS ====== */
-    .team-card{ padding:8px; position:relative; }
+    /* ======================================================
+       LEFT: TEAMS  ✅ 왼쪽 컬럼 꽉 차게
+    ====================================================== */
+    .col-left{ flex:1; }
+
+    .team-card{
+      padding:8px; position:relative;
+      flex:1;                 /* ✅ 4팀 카드가 세로를 꽉 채움 */
+      display:flex; flex-direction:column;
+    }
     .team-card::after{
       content:""; position:absolute; inset:-1px;
       border-radius:14px; pointer-events:none;
@@ -110,6 +122,9 @@
       display:grid;
       grid-template-columns: repeat(5, 1fr);
       gap:8px;
+      flex:1;                 /* ✅ 카드 내부 공간을 슬롯이 채움 */
+      grid-auto-rows: 1fr;    /* ✅ 슬롯 행 높이 자동 확장 */
+      align-content:stretch;
     }
 
     .slot{
@@ -118,11 +133,12 @@
       border-radius:12px;
       padding:6px; display:flex; flex-direction:column;
       align-items:center; justify-content:flex-start;
-      min-height:86px; position:relative;
+      min-height:96px;        /* ✅ 살짝 키움 */
+      position:relative;
     }
     .slot.empty{ opacity:0.75; }
     .slot img{
-      width:44px; height:44px; border-radius:999px; object-fit:cover;
+      width:48px; height:48px; border-radius:999px; object-fit:cover;
       border:2px solid var(--team-color);
       box-shadow:0 0 10px color-mix(in srgb, var(--team-color) 40%, transparent);
       background:#0a0f1e;
@@ -149,7 +165,11 @@
     .team-leader3{ --team-color: var(--c-leader3); }
     .team-leader4{ --team-color: var(--c-leader4); }
 
-    /* ====== CENTER: CURRENT AUCTION ====== */
+    /* ======================================================
+       CENTER: CURRENT AUCTION + BIG LOGO  ✅ 아래 공간 로고가 채움
+    ====================================================== */
+    .col-center{ display:flex; flex-direction:column; min-height:0; }
+
     .current-wrap{ display:flex; flex-direction:column; gap:8px; position:relative; }
 
     .current-player{
@@ -174,7 +194,6 @@
       background:var(--panel2); border:1px solid var(--line);
       border-radius:10px; padding:6px 8px;
     }
-
     .bid-box{ display:flex; gap:6px; align-items:center; }
     .bid-box input{ flex:1; }
     .bid-box button{ width:92px; }
@@ -187,16 +206,6 @@
     }
     .highest b{ color:var(--text); }
 
-    .bid-log{
-      background:var(--panel2);
-      border:1px solid var(--line);
-      border-radius:10px;
-      padding:6px 8px;
-      height:160px; overflow:auto;
-      font-size:12px; line-height:1.45;
-    }
-    .bid-log .item{ padding:2px 0; border-bottom:1px dashed #1f2a49; }
-
     .timer-bar{
       display:flex; align-items:center; justify-content:space-between;
       padding:6px 8px; border-radius:10px;
@@ -208,6 +217,17 @@
       padding:2px 8px; border-radius:8px; background:#0c1226; border:1px solid var(--line);
       min-width:40px; text-align:center;
     }
+
+    .bid-log{
+      background:var(--panel2);
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:6px 8px;
+      height:150px;           /* ✅ 로그 살짝 줄여 로고 패널에 공간 양보 */
+      overflow:auto;
+      font-size:12px; line-height:1.45;
+    }
+    .bid-log .item{ padding:2px 0; border-bottom:1px dashed #1f2a49; }
 
     #admin-controls{
       display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;
@@ -263,34 +283,33 @@
       font-size:13px; color:#cbd7f7; margin-top:2px; font-weight:800;
     }
 
-    /* ✅ TIME COUNT 아래 로고 칸 */
-    .club-logo-inline{
+    /* ✅ 가운데 아래 “로고 전용 패널” */
+    .center-logo-panel{
+      flex:1;                 /* ✅ 남은 높이 전부 채움 */
       display:flex;
       align-items:center;
       justify-content:center;
-      padding:8px 6px;
+      background:var(--panel);
       border:1px solid var(--line);
-      background:var(--panel2);
-      border-radius:10px;
+      border-radius:14px;
+      padding:12px;
+      box-shadow:0 8px 24px rgba(0,0,0,0.25);
+      min-height:180px;
     }
-    .club-logo-inline img{
-      height:54px;
-      max-width:170px;
+    .center-logo-panel img{
+      width:72%;
+      max-width:320px;
+      height:auto;
       object-fit:contain;
-      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
       opacity:0.95;
-      transition:opacity .15s ease, transform .15s ease, filter .15s ease;
-    }
-    .club-logo-inline img:hover{
-      opacity:1;
-      transform:translateY(-1px);
-      filter: drop-shadow(0 6px 12px rgba(0,0,0,0.55));
+      filter: drop-shadow(0 6px 18px rgba(0,0,0,0.6));
     }
 
-    /* ====== RIGHT: GROUP ROSTERS ====== */
+    /* ======================================================
+       RIGHT: GROUP ROSTERS
+    ====================================================== */
     .roster-panel{
-      display:flex; flex-direction:column; gap:8px; min-height:0;
-      height:100%;
+      display:flex; flex-direction:column; gap:8px; min-height:0; height:100%;
     }
     .roster-grid{
       display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; min-height:0; height:100%;
@@ -316,6 +335,7 @@
       grid-template-columns: repeat(4, 1fr);
       gap:8px;
       overflow:auto; padding-right:2px;
+      min-height:0;
     }
 
     .avatar{
@@ -332,7 +352,6 @@
     .avatar.current img{
       border-color:#7aa2ff; box-shadow:0 0 14px rgba(122,162,255,0.7);
     }
-
     .avatar.sold-by-leader1 img{ border-color:var(--c-leader1); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader1) 60%, transparent); }
     .avatar.sold-by-leader2 img{ border-color:var(--c-leader2); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader2) 60%, transparent); }
     .avatar.sold-by-leader3 img{ border-color:var(--c-leader3); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader3) 60%, transparent); }
@@ -357,6 +376,7 @@
       .wrap{ grid-template-columns: 1fr; height:auto; }
       .roster-grid{ grid-template-columns:1fr; }
       .avatars{ grid-template-columns: repeat(5,1fr); }
+      .center-logo-panel img{ width:60%; }
     }
   </style>
 </head>
@@ -396,15 +416,16 @@
   <div class="wrap">
 
     <!-- LEFT COLUMN: TEAMS -->
-    <div class="col">
+    <div class="col col-left">
       <div class="panel team-card team-leader1" id="team-leader1"></div>
       <div class="panel team-card team-leader2" id="team-leader2"></div>
       <div class="panel team-card team-leader3" id="team-leader3"></div>
       <div class="panel team-card team-leader4" id="team-leader4"></div>
     </div>
 
-    <!-- CENTER COLUMN: CURRENT AUCTION -->
-    <div class="col">
+    <!-- CENTER COLUMN -->
+    <div class="col col-center">
+      <!-- Current Auction -->
       <div class="panel">
         <div class="panel-title">
           <span>Current Auction</span>
@@ -454,14 +475,14 @@
             <div id="timer">-</div>
           </div>
 
-          <!-- ✅ TIME COUNT 아래 로고 칸 -->
-          <div class="club-logo-inline">
-            <img src="./assets/logo/cheorwon-esports-logo.png"
-                 alt="철원군청 e스포츠 동호회 로고">
-          </div>
-
           <div class="bid-log" id="bid-log"></div>
         </div>
+      </div>
+
+      <!-- ✅ BIG LOGO fills remaining space -->
+      <div class="center-logo-panel">
+        <img src="./assets/logo/cheorwon-esports-logo.png"
+             alt="철원군청 e스포츠 동호회 로고">
       </div>
     </div>
 
