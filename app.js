@@ -515,17 +515,19 @@ function updateBidButtonState(){
   bidButton.disabled=false; bidInput.disabled=false;
 }
 
-/* ===================== 입찰 (그룹별 최소가 + 5단위 강제) ===================== */
+/* ===================== 입찰 (그룹별 하한가 + C그룹 기본가 무시 + 5단위) ===================== */
 bidButton.addEventListener("click", async ()=>{
   if(!roomData || roomData.status!=="bidding" || !currentPlayerId) return;
 
   const amount = Number(bidInput.value);
-  if(!amount || amount < 0){
-    alert("입찰 금액 입력");
+
+  // 0도 허용해야 하므로 !amount 체크 금지
+  if(!Number.isFinite(amount) || amount < 0){
+    alert("입찰 금액을 올바르게 입력하세요.");
     return;
   }
 
-  // ✅ 5단위만 허용
+  // 5단위만 허용
   if (amount % 5 !== 0) {
     alert("입찰은 5점 단위로만 가능합니다. (예: 5, 10, 15...)");
     return;
@@ -533,16 +535,17 @@ bidButton.addEventListener("click", async ()=>{
 
   const leaderInfo = LEADERS[selectedRole];
   if(!leaderInfo){
-    alert("팀장 선택");
+    alert("팀장을 선택하세요.");
     return;
   }
 
+  // 포인트 부족 체크
   const team = teamsMap.get(selectedRole);
   const start = team?.pointsStart ?? leaderInfo.startPoints;
   const used  = team?.pointsUsed ?? 0;
   const remain = start - used;
   if(amount > remain){
-    alert("포인트 부족");
+    alert("포인트가 부족합니다.");
     return;
   }
 
@@ -550,29 +553,40 @@ bidButton.addEventListener("click", async ()=>{
   const baseRaw = Number(p?.basePrice ?? 0);
   const currentMax = Number(highestAmountSpan.textContent) || 0;
 
-  // ✅ 그룹별 최소 입찰 하한
-  const group = (p?.group || "C").toUpperCase();
-  let groupMin = 0;
-  if(group === "A") groupMin = 500;
-  else if(group === "B") groupMin = 200;
-  else if(group === "C") groupMin = 0;
-  else groupMin = 0; // 혹시 REMAIN/기타면 0
+  // ✅ 그룹값 robust 파싱 ("A", "A그룹", "Group A" 등 대응)
+  const gRaw = String(p?.group ?? "C").toUpperCase().trim();
+  const groupLetter = (gRaw.match(/[ABC]/)?.[0]) || "C";
 
-  // 기본가도 5단위 올림 처리
+  // ✅ 그룹별 최소 하한가
+  let groupMin = 0;
+  if(groupLetter === "A") groupMin = 300;
+  else if(groupLetter === "B") groupMin = 100;
+  else groupMin = 0; // C는 제한 없음(0)
+
+  // ✅ 기본가 5단위 올림
   let minBidByBase = baseRaw;
   if (minBidByBase % 5 !== 0) minBidByBase = Math.ceil(minBidByBase / 5) * 5;
 
-  // ✅ 최종 최소 입찰 = max(그룹하한, 기본가(5단위))
-  let minBid = Math.max(groupMin, minBidByBase);
+  // ✅ 최종 최소입찰 계산
+  // - A/B: max(그룹하한, 기본가)
+  // - C: 그룹하한만 사용(=0), 기본가 무시
+  const minBid = (groupLetter === "C")
+    ? groupMin
+    : Math.max(groupMin, minBidByBase);
 
   if(amount < minBid){
     alert(
-      `이 선수는 ${group}그룹이라 최소 ${groupMin}점 이상 + 기본가(${baseRaw}) 이상이어야 합니다.\n` +
-      `→ 현재 최소 입찰 가능 금액: ${minBid}점`
+      `${groupLetter}그룹 선수입니다.\n` +
+      `- 그룹 최소: ${groupMin}점\n` +
+      (groupLetter === "C"
+        ? `- C그룹은 기본가 제한 없음\n`
+        : `- 기본가: ${baseRaw}점\n`) +
+      `→ 현재 최소 입찰 가능: ${minBid}점`
     );
     return;
   }
 
+  // 최고가 + 5 규칙
   if(currentMax && amount < currentMax + 5){
     alert(`최고가(${currentMax})보다 최소 5점 높게 입찰해야 합니다.`);
     return;
@@ -593,7 +607,6 @@ bidButton.addEventListener("click", async ()=>{
     alert("입찰 오류: " + (e.message || e.code));
   }
 });
-
 
 /* ===================== 타이머 ===================== */
 let timerInterval=null;
