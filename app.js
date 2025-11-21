@@ -2,6 +2,7 @@
 // REAL-TIME AUCTION + MAIN(A→B→C) + REMAINING RE-AUCTION
 // TEAM ROSTER name + price
 // Role normalize + 5-step bidding + safe finalize + Timestamp/number endsAt support
+// ✅ finalizeRound uses NO-index logic (no composite index required)
 
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -9,7 +10,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebas
 import {
   getFirestore,
   doc, getDoc, onSnapshot,
-  collection, addDoc, query, orderBy, where, limit,
+  collection, addDoc, query, orderBy,
   serverTimestamp, runTransaction,
   updateDoc, setDoc, getDocs, deleteDoc
 } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
@@ -144,8 +145,7 @@ async function adminStartMainAuction(testMode){
       currentGroup: group,
       currentPlayerId: firstPlayer?.id || null,
       roundId: (room.roundId ?? 0) + 1,
-      // 숫자(ms)로 저장
-      roundEndsAt: Date.now() + ROUND_SECONDS*1000,
+      roundEndsAt: Date.now() + ROUND_SECONDS*1000, // 숫자(ms)
     });
 
     alert(testMode ? "테스트 시작(낙찰 없음)" : "1차 경매 시작");
@@ -194,8 +194,7 @@ async function adminStartRemainingAuction(){
       currentGroup: "REMAIN",
       currentPlayerId: remain[0].id,
       roundId: (room.roundId ?? 0) + 1,
-      // 숫자(ms)로 저장
-      roundEndsAt: Date.now() + ROUND_SECONDS*1000,
+      roundEndsAt: Date.now() + ROUND_SECONDS*1000, // 숫자(ms)
     });
 
     alert("잔여 선수 재경매 시작!");
@@ -282,7 +281,7 @@ onSnapshot(roomRef, async (snap)=>{
   renderRosterByGroup(allPlayers, currentPlayerId);
   startTimerIfNeeded(roomData);
 
-  // ✅ endsAt이 Timestamp여도 숫자여도 자동 finalize
+  // ✅ endsAtMs가 지났으면 자동 finalize
   const endsAtMs = toMillis(roomData.roundEndsAt);
   if (roomData.status === "bidding" && endsAtMs && endsAtMs <= Date.now()) {
     safeFinalize();
@@ -396,7 +395,6 @@ function renderTeams(){
       const hasPlayer = !!p;
       const nameText = hasPlayer ? (p.name || pid) : role;
       const priceText = hasPlayer && p.finalPrice ? `${p.finalPrice}점` : "";
-
       const imgHtml = p?.photoUrl ? `<img src="${p.photoUrl}" />` : "";
 
       return `
@@ -516,7 +514,6 @@ bidButton.addEventListener("click", async ()=>{
     return;
   }
 
-  // ✅ 5단위만 허용
   if (amount % 5 !== 0) {
     alert("입찰은 5점 단위로만 가능합니다. (예: 5, 10, 15...)");
     return;
@@ -541,7 +538,6 @@ bidButton.addEventListener("click", async ()=>{
   const baseRaw = Number(p?.basePrice ?? 0);
   const currentMax = Number(highestAmountSpan.textContent) || 0;
 
-  // 기본가도 5단위 올림 처리
   let minBid = baseRaw;
   if (minBid % 5 !== 0) minBid = Math.ceil(minBid / 5) * 5;
 
@@ -623,11 +619,10 @@ async function safeFinalize(){
   }
 }
 
-/* ===================== 라운드 종료 처리(트랜잭션 안전) ===================== */
+/* ===================== 라운드 종료 처리(인덱스 없는 방식) ===================== */
 async function finalizeRound(){
   const roomRef = doc(db,"rooms",ROOM_ID);
 
-  // 1) 최신 room 읽기 (트랜잭션 밖)
   const roomSnap0 = await getDoc(roomRef);
   if(!roomSnap0.exists()) return;
   const room0 = roomSnap0.data();
@@ -637,22 +632,18 @@ async function finalizeRound(){
   const playerId0 = room0.currentPlayerId;
   if(!playerId0) return;
 
-  // 2) 현재 선수 읽기 (트랜잭션 밖)
   const playerRef = doc(db,"rooms",ROOM_ID,"players",playerId0);
   const playerSnap0 = await getDoc(playerRef);
   if(!playerSnap0.exists()) return;
   const player0 = playerSnap0.data();
 
-  // 3) 최고 입찰 찾기 (🔥 인덱스 없는 방식)
+  // 🔥 최고 입찰 찾기(복합 인덱스 없이)
   let topBid0 = null;
-
-  // 3-1) 로컬(allBids)에서 찾기
   const localBids = allBids.filter(b => b.roundId===roundId0 && b.playerId===playerId0);
   if(localBids.length){
     localBids.sort((a,b)=>Number(b.amount)-Number(a.amount));
     topBid0 = localBids[0];
   } else {
-    // 3-2) 로컬이 늦었으면 bids 전체 읽어서 max 계산
     const allBidsSnap = await getDocs(collection(db,"rooms",ROOM_ID,"bids"));
     const arr = allBidsSnap.docs.map(d=>d.data());
     const roundBids = arr.filter(b => b.roundId===roundId0 && b.playerId===playerId0);
@@ -662,7 +653,7 @@ async function finalizeRound(){
     }
   }
 
-  // 4) 다음 선수 결정 (트랜잭션 밖)
+  // 다음 선수 결정(트랜잭션 밖)
   let nextPlayer = null;
   let nextGroup = room0.currentGroup || "A";
   let nextRemainingIndex = room0.remainingIndex ?? 0;
@@ -702,7 +693,6 @@ async function finalizeRound(){
     nextGroup = group;
   }
 
-  // 5) 실제 업데이트는 트랜잭션에서 (docRef만)
   await runTransaction(db, async (tx)=>{
     const roomSnap = await tx.get(roomRef);
     if(!roomSnap.exists()) return;
@@ -725,7 +715,7 @@ async function finalizeRound(){
       return;
     }
 
-    // 입찰 없으면 다음 선수로
+    // 입찰 없으면 다음 선수
     if(!topBid0){
       tx.update(roomRef,{
         currentPlayerId: nextPlayer?.id || null,
@@ -742,14 +732,12 @@ async function finalizeRound(){
     const price = Number(topBid0.amount)||0;
     const role = normalizeRole(player0.role);
 
-    // 선수 sold 처리
     tx.update(playerRef,{
       status:"sold",
       assignedTeamId:winnerLeaderId,
       finalPrice:price
     });
 
-    // 팀 포인트/로스터
     const teamRef = doc(db,"rooms",ROOM_ID,"teams",winnerLeaderId);
     const teamSnap = await tx.get(teamRef);
     const team = teamSnap.exists() ? teamSnap.data() : {
@@ -768,7 +756,6 @@ async function finalizeRound(){
       roster:newRoster
     },{merge:true});
 
-    // 다음 선수
     tx.update(roomRef,{
       currentPlayerId: nextPlayer?.id || null,
       currentGroup: nextGroup,
