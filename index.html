@@ -14,7 +14,7 @@
       --text:#e6ecff;
       --muted:#9fb0d9;
 
-      /* ✅ 팀 컬러(leaderId 기준) */
+      /* 팀 컬러 */
       --c-leader1:#7aa2ff;
       --c-leader2:#ff7ad6;
       --c-leader3:#62e7a7;
@@ -112,7 +112,6 @@
       gap:8px;
     }
 
-    /* 슬롯: 위는 원(사진), 아래는 이름/낙찰가 */
     .slot{
       background:var(--panel2);
       border:1px dashed #2a3660;
@@ -145,7 +144,6 @@
       padding:2px 6px; border-radius:999px; border:1px solid var(--line);
     }
 
-    /* ✅ 팀카드별 컬러 바인딩 (app.js에서 --team-color 주입) */
     .team-leader1{ --team-color: var(--c-leader1); }
     .team-leader2{ --team-color: var(--c-leader2); }
     .team-leader3{ --team-color: var(--c-leader3); }
@@ -218,7 +216,7 @@
       font-size:12px; padding:6px 8px; border-radius:8px;
     }
 
-    /* ✅ 낙찰 오버레이 */
+    /* 낙찰 오버레이 */
     .auction-overlay{
       position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
       background:rgba(6,9,18,0.65); backdrop-filter: blur(3px);
@@ -259,12 +257,10 @@
       background:#0a0f1e;
     }
     .overlay-name{
-      font-size:15px; font-weight:900; color:#fff;
-      white-space:nowrap;
+      font-size:15px; font-weight:900; color:#fff; white-space:nowrap;
     }
     .overlay-price{
-      font-size:13px; color:#cbd7f7; margin-top:2px;
-      font-weight:800;
+      font-size:13px; color:#cbd7f7; margin-top:2px; font-weight:800;
     }
 
     /* ====== RIGHT: GROUP ROSTERS ====== */
@@ -313,13 +309,10 @@
       border-color:#7aa2ff; box-shadow:0 0 14px rgba(122,162,255,0.7);
     }
 
-    /* ✅ sold 된 선수: 팀별 컬러 테두리 */
     .avatar.sold-by-leader1 img{ border-color:var(--c-leader1); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader1) 60%, transparent); }
     .avatar.sold-by-leader2 img{ border-color:var(--c-leader2); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader2) 60%, transparent); }
     .avatar.sold-by-leader3 img{ border-color:var(--c-leader3); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader3) 60%, transparent); }
     .avatar.sold-by-leader4 img{ border-color:var(--c-leader4); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader4) 60%, transparent); }
-
-    /* sold 상태면 살짝만 흐리게 */
     .avatar.sold img{ opacity:0.55; }
 
     .avatar .badge{
@@ -334,6 +327,30 @@
       font-size:11px; color:#e7eeff; font-weight:700;
       text-align:center; max-width:70px;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+
+    /* ====== ONLY CLUB LOGO STRIP (BOTTOM) ====== */
+    .club-logo-strip{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:14px 10px 18px;
+      margin:0 10px 12px;
+      border-top:1px solid var(--line);
+      opacity:0.95;
+    }
+    .club-logo-strip img{
+      height:64px;
+      max-width:180px;
+      object-fit:contain;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+      opacity:0.95;
+      transition:opacity .15s ease, transform .15s ease, filter .15s ease;
+    }
+    .club-logo-strip img:hover{
+      opacity:1;
+      transform:translateY(-2px);
+      filter: drop-shadow(0 6px 12px rgba(0,0,0,0.55));
     }
 
     @media (max-width:1100px){
@@ -395,7 +412,7 @@
         </div>
 
         <div class="current-wrap">
-          <!-- ✅ 낙찰 오버레이 -->
+          <!-- 낙찰 오버레이 -->
           <div id="auction-overlay" class="auction-overlay">
             <div class="overlay-card">
               <div id="auction-overlay-team" class="overlay-team">-</div>
@@ -469,6 +486,12 @@
       </div>
     </div>
 
+  </div> <!-- wrap end -->
+
+  <!-- ✅ ONLY CLUB LOGO (BOTTOM) -->
+  <div class="club-logo-strip">
+    <img src="./assets/logo/cheorwon-esports-logo.png"
+         alt="철원군청 e스포츠 동호회 로고" />
   </div>
 
   <script type="module" src="./app.js"></script>
