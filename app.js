@@ -2,7 +2,8 @@
 // REAL-TIME AUCTION + MAIN(A→B→C) + REMAINING RE-AUCTION
 // TEAM ROSTER name + price
 // Role normalize + 5-step bidding + safe finalize + Timestamp/number endsAt support
-// ✅ finalizeRound uses NO-index logic (no composite index required)
+// ✅ finalizeRound uses NO-index logic
+// ✅ transaction read-before-write order fixed
 
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -145,7 +146,7 @@ async function adminStartMainAuction(testMode){
       currentGroup: group,
       currentPlayerId: firstPlayer?.id || null,
       roundId: (room.roundId ?? 0) + 1,
-      roundEndsAt: Date.now() + ROUND_SECONDS*1000, // 숫자(ms)
+      roundEndsAt: Date.now() + ROUND_SECONDS*1000,
     });
 
     alert(testMode ? "테스트 시작(낙찰 없음)" : "1차 경매 시작");
@@ -194,7 +195,7 @@ async function adminStartRemainingAuction(){
       currentGroup: "REMAIN",
       currentPlayerId: remain[0].id,
       roundId: (room.roundId ?? 0) + 1,
-      roundEndsAt: Date.now() + ROUND_SECONDS*1000, // 숫자(ms)
+      roundEndsAt: Date.now() + ROUND_SECONDS*1000,
     });
 
     alert("잔여 선수 재경매 시작!");
@@ -211,11 +212,9 @@ async function adminResetAll(){
   try{
     const roomRef = doc(db,"rooms",ROOM_ID);
 
-    // bids 삭제
     const bidsSnap = await getDocs(collection(db,"rooms",ROOM_ID,"bids"));
     await Promise.all(bidsSnap.docs.map(d=> deleteDoc(d.ref)));
 
-    // players 초기화
     const playersSnap = await getDocs(collection(db,"rooms",ROOM_ID,"players"));
     await Promise.all(playersSnap.docs.map(d=>{
       return updateDoc(d.ref,{
@@ -225,7 +224,6 @@ async function adminResetAll(){
       });
     }));
 
-    // teams 초기화
     const teamsSnap = await getDocs(collection(db,"rooms",ROOM_ID,"teams"));
     await Promise.all(teamsSnap.docs.map(d=>{
       const rosterReset = {};
@@ -238,7 +236,6 @@ async function adminResetAll(){
       },{merge:true});
     }));
 
-    // room 초기화
     await updateDoc(roomRef,{
       status:"waiting",
       testMode:false,
@@ -281,7 +278,6 @@ onSnapshot(roomRef, async (snap)=>{
   renderRosterByGroup(allPlayers, currentPlayerId);
   startTimerIfNeeded(roomData);
 
-  // ✅ endsAtMs가 지났으면 자동 finalize
   const endsAtMs = toMillis(roomData.roundEndsAt);
   if (roomData.status === "bidding" && endsAtMs && endsAtMs <= Date.now()) {
     safeFinalize();
@@ -360,7 +356,7 @@ async function renderCurrentPlayer(pid){
   currentBio.textContent=p.bio || "-";
 }
 
-/* ✅ TEAM ROSTER: 이름 + 낙찰가 표시 + roster 자동복구 */
+/* TEAM ROSTER */
 function renderTeams(){
   const byId=(id)=>playersMap.get(id);
 
@@ -377,7 +373,6 @@ function renderTeams(){
 
     const rawRoster = team?.roster || {};
 
-    // assignedTeamId로 자동 복구 roster
     const derivedRoster = {};
     allPlayers
       .filter(p => p.status==="sold" && p.assignedTeamId===leaderId)
@@ -501,7 +496,7 @@ function updateBidButtonState(){
     return;
   }
   bidButton.disabled=false;
-  bidInput.disabled=false; // TURN 없음 → 전원 입찰 가능
+  bidInput.disabled=false;
 }
 
 /* ===================== 입찰 (5단위 강제) ===================== */
@@ -619,7 +614,7 @@ async function safeFinalize(){
   }
 }
 
-/* ===================== 라운드 종료 처리(인덱스 없는 방식) ===================== */
+/* ===================== 라운드 종료 처리(인덱스 없음 + read-before-write OK) ===================== */
 async function finalizeRound(){
   const roomRef = doc(db,"rooms",ROOM_ID);
 
@@ -637,7 +632,7 @@ async function finalizeRound(){
   if(!playerSnap0.exists()) return;
   const player0 = playerSnap0.data();
 
-  // 🔥 최고 입찰 찾기(복합 인덱스 없이)
+  // 최고 입찰 찾기(인덱스 없이)
   let topBid0 = null;
   const localBids = allBids.filter(b => b.roundId===roundId0 && b.playerId===playerId0);
   if(localBids.length){
@@ -694,6 +689,7 @@ async function finalizeRound(){
   }
 
   await runTransaction(db, async (tx)=>{
+    // ✅ READS FIRST
     const roomSnap = await tx.get(roomRef);
     if(!roomSnap.exists()) return;
     const room = roomSnap.data();
@@ -702,7 +698,7 @@ async function finalizeRound(){
     if((room.roundId ?? 0) !== roundId0) return;
     if(room.currentPlayerId !== playerId0) return;
 
-    // TEST 모드면 낙찰 없이 다음으로만
+    // TEST 모드 → room만 다음으로
     if(room.testMode){
       tx.update(roomRef,{
         currentPlayerId: nextPlayer?.id || null,
@@ -715,7 +711,7 @@ async function finalizeRound(){
       return;
     }
 
-    // 입찰 없으면 다음 선수
+    // 입찰 없으면 room만 다음으로
     if(!topBid0){
       tx.update(roomRef,{
         currentPlayerId: nextPlayer?.id || null,
@@ -732,12 +728,7 @@ async function finalizeRound(){
     const price = Number(topBid0.amount)||0;
     const role = normalizeRole(player0.role);
 
-    tx.update(playerRef,{
-      status:"sold",
-      assignedTeamId:winnerLeaderId,
-      finalPrice:price
-    });
-
+    // ✅ team 문서도 READ FIRST
     const teamRef = doc(db,"rooms",ROOM_ID,"teams",winnerLeaderId);
     const teamSnap = await tx.get(teamRef);
     const team = teamSnap.exists() ? teamSnap.data() : {
@@ -746,6 +737,13 @@ async function finalizeRound(){
       pointsUsed:0,
       roster:{}
     };
+
+    // ---- 이제부터 WRITES ----
+    tx.update(playerRef,{
+      status:"sold",
+      assignedTeamId:winnerLeaderId,
+      finalPrice:price
+    });
 
     const newRoster = { ...(team.roster||{}) };
     newRoster[role] = playerId0;
