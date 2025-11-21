@@ -381,9 +381,11 @@ function renderTeams(){
     const remain=start-used;
 
     const rawRoster = team?.roster || {};
+
+    // ✅ assignedTeamId만으로 로스터 복구(혹시 status가 달라도 잡히게)
     const derivedRoster = {};
     allPlayers
-      .filter(p => p.status==="sold" && p.assignedTeamId===leaderId)
+      .filter(p => p.assignedTeamId === leaderId)
       .forEach(p=>{
         derivedRoster[normalizeRole(p.role)] = p.id;
       });
@@ -395,17 +397,24 @@ function renderTeams(){
       const p=pid ? byId(pid) : null;
 
       const hasPlayer=!!p;
-      const nameText=hasPlayer ? (p.name||pid) : role;
-      const priceText=hasPlayer && p.finalPrice ? `${p.finalPrice}점` : "";
-      const imgHtml=p?.photoUrl ? `<img src="${p.photoUrl}" />` : "";
+
+      // ✅ 빈 슬롯은 역할을 큰 글씨로 안 보여줌
+      const nameText = hasPlayer ? (p.name || pid) : "";
+      const priceText = hasPlayer && p.finalPrice ? `${p.finalPrice}점` : "";
+      const imgHtml = hasPlayer && p.photoUrl ? `<img src="${p.photoUrl}" />` : "";
 
       return `
         <div class="slot ${hasPlayer ? "" : "empty"}">
           ${imgHtml}
           <div class="slot-text">
-            <div class="slot-name">${nameText}</div>
-            ${priceText ? `<div class="slot-price">${priceText}</div>` : ""}
+            ${
+              hasPlayer
+                ? `<div class="slot-name">${nameText}</div>
+                   ${priceText ? `<div class="slot-price">${priceText}</div>` : ""}`
+                : `<div class="slot-name" style="opacity:.35;">EMPTY</div>`
+            }
           </div>
+          <!-- 역할은 항상 작은 라벨로만 -->
           <div class="slot-label">${role}</div>
         </div>
       `;
@@ -420,6 +429,7 @@ function renderTeams(){
     `;
   });
 }
+
 
 /* ✅ sold-by-team 클래스 부여 */
 function renderRosterByGroup(players, currentPid){
