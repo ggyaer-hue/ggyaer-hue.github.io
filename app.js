@@ -515,42 +515,85 @@ function updateBidButtonState(){
   bidButton.disabled=false; bidInput.disabled=false;
 }
 
-/* ===================== 입찰 (5단위 강제) ===================== */
+/* ===================== 입찰 (그룹별 최소가 + 5단위 강제) ===================== */
 bidButton.addEventListener("click", async ()=>{
   if(!roomData || roomData.status!=="bidding" || !currentPlayerId) return;
 
-  const amount=Number(bidInput.value);
-  if(!amount || amount<=0){ alert("입찰 금액 입력"); return; }
-  if(amount%5!==0){ alert("입찰은 5점 단위"); return; }
+  const amount = Number(bidInput.value);
+  if(!amount || amount < 0){
+    alert("입찰 금액 입력");
+    return;
+  }
 
-  const leaderInfo=LEADERS[selectedRole];
-  if(!leaderInfo){ alert("팀장 선택"); return; }
+  // ✅ 5단위만 허용
+  if (amount % 5 !== 0) {
+    alert("입찰은 5점 단위로만 가능합니다. (예: 5, 10, 15...)");
+    return;
+  }
 
-  const team=teamsMap.get(selectedRole);
-  const start=team?.pointsStart ?? leaderInfo.startPoints;
-  const used=team?.pointsUsed ?? 0;
-  const remain=start-used;
-  if(amount>remain){ alert("포인트 부족"); return; }
+  const leaderInfo = LEADERS[selectedRole];
+  if(!leaderInfo){
+    alert("팀장 선택");
+    return;
+  }
 
-  const p=playersMap.get(currentPlayerId);
-  const baseRaw=Number(p?.basePrice??0);
-  const currentMax=Number(highestAmountSpan.textContent)||0;
+  const team = teamsMap.get(selectedRole);
+  const start = team?.pointsStart ?? leaderInfo.startPoints;
+  const used  = team?.pointsUsed ?? 0;
+  const remain = start - used;
+  if(amount > remain){
+    alert("포인트 부족");
+    return;
+  }
 
-  let minBid=baseRaw;
-  if(minBid%5!==0) minBid=Math.ceil(minBid/5)*5;
-  if(amount<minBid){ alert(`기본가 ${baseRaw} 이상(최소 ${minBid})`); return; }
-  if(currentMax && amount<currentMax+5){ alert(`최고가보다 +5 이상`); return; }
+  const p = playersMap.get(currentPlayerId);
+  const baseRaw = Number(p?.basePrice ?? 0);
+  const currentMax = Number(highestAmountSpan.textContent) || 0;
 
-  await addDoc(collection(db,"rooms",ROOM_ID,"bids"),{
-    roundId: roomData.roundId ?? 0,
-    playerId: currentPlayerId,
-    leaderId: selectedRole,
-    leaderName: leaderInfo.name,
-    amount,
-    createdAt: serverTimestamp()
-  });
-  bidInput.value="";
+  // ✅ 그룹별 최소 입찰 하한
+  const group = (p?.group || "C").toUpperCase();
+  let groupMin = 0;
+  if(group === "A") groupMin = 500;
+  else if(group === "B") groupMin = 200;
+  else if(group === "C") groupMin = 0;
+  else groupMin = 0; // 혹시 REMAIN/기타면 0
+
+  // 기본가도 5단위 올림 처리
+  let minBidByBase = baseRaw;
+  if (minBidByBase % 5 !== 0) minBidByBase = Math.ceil(minBidByBase / 5) * 5;
+
+  // ✅ 최종 최소 입찰 = max(그룹하한, 기본가(5단위))
+  let minBid = Math.max(groupMin, minBidByBase);
+
+  if(amount < minBid){
+    alert(
+      `이 선수는 ${group}그룹이라 최소 ${groupMin}점 이상 + 기본가(${baseRaw}) 이상이어야 합니다.\n` +
+      `→ 현재 최소 입찰 가능 금액: ${minBid}점`
+    );
+    return;
+  }
+
+  if(currentMax && amount < currentMax + 5){
+    alert(`최고가(${currentMax})보다 최소 5점 높게 입찰해야 합니다.`);
+    return;
+  }
+
+  try{
+    await addDoc(collection(db,"rooms",ROOM_ID,"bids"),{
+      roundId: roomData.roundId ?? 0,
+      playerId: currentPlayerId,
+      leaderId: selectedRole,
+      leaderName: leaderInfo.name,
+      amount,
+      createdAt: serverTimestamp()
+    });
+    bidInput.value = "";
+  }catch(e){
+    console.error(e);
+    alert("입찰 오류: " + (e.message || e.code));
+  }
 });
+
 
 /* ===================== 타이머 ===================== */
 let timerInterval=null;
