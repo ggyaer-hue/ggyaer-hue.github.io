@@ -637,23 +637,32 @@ async function finalizeRound(){
   const playerId0 = room0.currentPlayerId;
   if(!playerId0) return;
 
-  // 2) 현재 선수/최고 입찰 읽기 (트랜잭션 밖)
+  // 2) 현재 선수 읽기 (트랜잭션 밖)
   const playerRef = doc(db,"rooms",ROOM_ID,"players",playerId0);
   const playerSnap0 = await getDoc(playerRef);
   if(!playerSnap0.exists()) return;
   const player0 = playerSnap0.data();
 
-  const bidsQ = query(
-    collection(db,"rooms",ROOM_ID,"bids"),
-    where("roundId","==",roundId0),
-    where("playerId","==",playerId0),
-    orderBy("amount","desc"),
-    limit(1)
-  );
-  const bidsSnap0 = await getDocs(bidsQ);
-  const topBid0 = bidsSnap0.empty ? null : bidsSnap0.docs[0].data();
+  // 3) 최고 입찰 찾기 (🔥 인덱스 없는 방식)
+  let topBid0 = null;
 
-  // 3) 다음 선수 결정 (트랜잭션 밖)
+  // 3-1) 로컬(allBids)에서 찾기
+  const localBids = allBids.filter(b => b.roundId===roundId0 && b.playerId===playerId0);
+  if(localBids.length){
+    localBids.sort((a,b)=>Number(b.amount)-Number(a.amount));
+    topBid0 = localBids[0];
+  } else {
+    // 3-2) 로컬이 늦었으면 bids 전체 읽어서 max 계산
+    const allBidsSnap = await getDocs(collection(db,"rooms",ROOM_ID,"bids"));
+    const arr = allBidsSnap.docs.map(d=>d.data());
+    const roundBids = arr.filter(b => b.roundId===roundId0 && b.playerId===playerId0);
+    if(roundBids.length){
+      roundBids.sort((a,b)=>Number(b.amount)-Number(a.amount));
+      topBid0 = roundBids[0];
+    }
+  }
+
+  // 4) 다음 선수 결정 (트랜잭션 밖)
   let nextPlayer = null;
   let nextGroup = room0.currentGroup || "A";
   let nextRemainingIndex = room0.remainingIndex ?? 0;
@@ -693,18 +702,17 @@ async function finalizeRound(){
     nextGroup = group;
   }
 
-  // 4) 실제 업데이트는 트랜잭션에서 (docRef만)
+  // 5) 실제 업데이트는 트랜잭션에서 (docRef만)
   await runTransaction(db, async (tx)=>{
     const roomSnap = await tx.get(roomRef);
     if(!roomSnap.exists()) return;
     const room = roomSnap.data();
 
-    // 다른 클라이언트가 이미 finalize 했으면 종료
     if(room.status !== "bidding") return;
     if((room.roundId ?? 0) !== roundId0) return;
     if(room.currentPlayerId !== playerId0) return;
 
-    // TEST 모드면 낙찰/포인트 변경 없이 다음으로만
+    // TEST 모드면 낙찰 없이 다음으로만
     if(room.testMode){
       tx.update(roomRef,{
         currentPlayerId: nextPlayer?.id || null,
@@ -717,7 +725,7 @@ async function finalizeRound(){
       return;
     }
 
-    // 입찰이 없으면 선수 이동 없이 다음으로
+    // 입찰 없으면 다음 선수로
     if(!topBid0){
       tx.update(roomRef,{
         currentPlayerId: nextPlayer?.id || null,
@@ -734,14 +742,14 @@ async function finalizeRound(){
     const price = Number(topBid0.amount)||0;
     const role = normalizeRole(player0.role);
 
-    // 선수 sold + finalPrice/assignedTeamId 기록
+    // 선수 sold 처리
     tx.update(playerRef,{
       status:"sold",
       assignedTeamId:winnerLeaderId,
       finalPrice:price
     });
 
-    // 팀 포인트/로스터 업데이트
+    // 팀 포인트/로스터
     const teamRef = doc(db,"rooms",ROOM_ID,"teams",winnerLeaderId);
     const teamSnap = await tx.get(teamRef);
     const team = teamSnap.exists() ? teamSnap.data() : {
@@ -760,7 +768,7 @@ async function finalizeRound(){
       roster:newRoster
     },{merge:true});
 
-    // 다음 선수로 진행
+    // 다음 선수
     tx.update(roomRef,{
       currentPlayerId: nextPlayer?.id || null,
       currentGroup: nextGroup,
