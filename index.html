@@ -55,7 +55,10 @@
     }
 
     /* ===== Left: Teams ===== */
-    .teams-wrap{gap:10px; display:flex; flex-direction:column; min-height:0; overflow:auto;}
+    .teams-wrap{
+      gap:10px; display:flex; flex-direction:column; min-height:0;
+      overflow:auto; padding-bottom:6px;
+    }
     .team-card{
       background:var(--panel2); border:2px solid var(--line);
       border-radius:14px; padding:10px; position:relative;
@@ -91,6 +94,21 @@
     .slot-price{ font-size:11px; color:var(--muted); font-weight:700; margin-top:2px;}
     .slot-label{ display:none; }
     .slot.empty{ opacity:.45; }
+
+    /* ✅ TEAM ROSTER 아래 로고 영역 */
+    .left-logo-area{
+      margin-top:8px;
+      display:flex; justify-content:center; align-items:center;
+      background:transparent; border:none; padding:6px 0 0 0;
+      flex-shrink:0;
+    }
+    .left-logo-area img{
+      max-width:88%;
+      max-height:140px;
+      object-fit:contain;
+      filter: drop-shadow(0 8px 22px rgba(0,0,0,.55));
+      opacity:.95;
+    }
 
     /* ===== Middle: Current Auction ===== */
     .current-wrap{display:flex; flex-direction:column; gap:10px; min-height:0;}
@@ -143,16 +161,6 @@
     .bid-row button:disabled{opacity:.45; cursor:not-allowed;}
     .bid-stats{font-size:13px; color:var(--muted); display:flex; justify-content:space-between;}
 
-    .logo-area{
-      display:flex; justify-content:center; align-items:center;
-      background:transparent; border:none; padding:2px 0 0 0;
-    }
-    .logo-area img{
-      max-width:75%; max-height:90px; object-fit:contain;
-      filter: drop-shadow(0 6px 18px rgba(0,0,0,.45));
-    }
-
-    /* ✅ Bid log now in middle, make it fill remaining height */
     .log-card{
       background:var(--panel2); border:1px solid var(--line);
       border-radius:14px; padding:10px;
@@ -201,7 +209,6 @@
       background:#222b52; border:1px solid var(--line); color:#dfe6ff;
       padding:6px 10px; border-radius:10px; font-weight:800; cursor:pointer;
     }
-    .admin-controls button:hover{filter:brightness(1.12);}
 
     /* ===== Sold Overlay ===== */
     .overlay{
@@ -234,7 +241,7 @@
 <body>
   <div class="page">
 
-    <!-- LEFT: TEAM ROSTERS -->
+    <!-- LEFT: TEAM ROSTERS + LOGO BELOW -->
     <section class="panel">
       <div class="panel-header">
         <div class="title">TEAM ROSTER</div>
@@ -250,6 +257,11 @@
         <div class="team-card" id="team-leader2"></div>
         <div class="team-card" id="team-leader3"></div>
         <div class="team-card" id="team-leader4"></div>
+      </div>
+
+      <!-- ✅ 로고가 팀로스터 아래에 고정 -->
+      <div class="left-logo-area">
+        <img src="./assets/cheorwon-esports-logo.png" alt="cheorwon esports logo">
       </div>
     </section>
 
@@ -293,7 +305,6 @@
         </div>
       </div>
 
-      <!-- TIME COUNT -->
       <div class="time-card">
         <div class="time-left">
           <div class="time-title">현재 경매중</div>
@@ -302,7 +313,6 @@
         <div class="time-count" id="timer">-</div>
       </div>
 
-      <!-- BID INPUT -->
       <div class="bid-box">
         <div class="bid-row">
           <input id="bid-amount" type="number" placeholder="입찰 금액(5점 단위)" step="5" min="0">
@@ -313,13 +323,8 @@
           <div>최고가: <b id="highest-amount">-</b>점</div>
           <div>최고 입찰: <b id="highest-leader">-</b></div>
         </div>
-
-        <div class="logo-area">
-          <img src="./assets/cheorwon-esports-logo.png" alt="cheorwon esports logo">
-        </div>
       </div>
 
-      <!-- ✅ BID LOG moved to middle -->
       <div class="log-card" id="bid-log"></div>
     </section>
 
