@@ -58,7 +58,7 @@
     /* ===== MAIN LAYOUT ===== */
     .wrap{
       display:grid;
-      grid-template-columns: 1.05fr 1.05fr 1.45fr; /* 가운데 조금 넓음 유지 */
+      grid-template-columns: 1.05fr 1.05fr 1.45fr;
       gap:10px; padding:10px;
       height:calc(100vh - 56px);
     }
@@ -77,7 +77,7 @@
       margin-bottom:8px;
     }
 
-    /* ===== LEFT: TEAMS (꽉 채움) ===== */
+    /* ===== LEFT: TEAMS ===== */
     .col-left{flex:1;}
     .team-card{
       padding:8px; position:relative;
@@ -141,18 +141,15 @@
     /* ===== CENTER: CURRENT AUCTION + LOGO ===== */
     .col-center{display:flex; flex-direction:column; min-height:0;}
 
-    /* ✅ Current Auction 비율 더 키움 */
     .current-auction-panel{
       flex:1.55; display:flex; flex-direction:column; min-height:0;
     }
-
-    /* ✅ 패널 안 내용이 남은 높이 꽉 먹게 */
     .current-wrap{
       display:flex; flex-direction:column; gap:10px;
       position:relative; flex:1; min-height:0;
     }
 
-    /* ✅ 선수사진 더 크게 */
+    /* 현재 선수 사진 크게 */
     .current-player{
       display:grid;
       grid-template-columns:120px 1fr;
@@ -188,7 +185,6 @@
     }
     .highest b{color:var(--text);}
 
-    /* ✅ TIME COUNT 바 자체도 살짝 두껍게 */
     .timer-bar{
       display:flex; align-items:center; justify-content:space-between;
       padding:8px 10px; border-radius:10px;
@@ -201,7 +197,7 @@
       min-width:46px; text-align:center;
     }
 
-    /* ✅ TIME COUNT 아래 공간 = 로그가 전부 채우게 */
+    /* TIME COUNT 아래를 꽉 채우는 로그 */
     .bid-log{
       flex:1;
       min-height:220px;
@@ -249,7 +245,7 @@
     .overlay-name{font-size:15px; font-weight:900; color:#fff; white-space:nowrap;}
     .overlay-price{font-size:13px; color:#cbd7f7; margin-top:2px; font-weight:800;}
 
-    /* ✅ 로고는 더 작게 + 비율도 조금 줄임 */
+    /* 로고(테두리 없음, 공간 작게) */
     .center-logo-panel{
       flex:0.50;
       display:flex; align-items:center; justify-content:center;
@@ -330,7 +326,7 @@
         <div id="room-status-dot" class="dot"></div>
         <div id="room-status-text">대기중</div>
       </div>
-      <div id="mode-badge" class="badge">MAIN · REAL · A</div>
+      <div id="mode-badge" class="badge">ROOM1 · REAL · A</div>
     </div>
 
     <div class="topbar-right">
