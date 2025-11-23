@@ -64,7 +64,8 @@
     /* ====== MAIN LAYOUT ====== */
     .wrap{
       display:grid;
-      grid-template-columns: 1.05fr 0.9fr 1.6fr;
+      /* ✅ 가운데(Current Auction) 살짝 더 넓게 */
+      grid-template-columns: 1.05fr 1.05fr 1.45fr;
       gap:10px; padding:10px;
       height:calc(100vh - 56px);
     }
@@ -156,16 +157,27 @@
 
     /* ===== CENTER: CURRENT AUCTION + LOGO ===== */
     .col-center{ display:flex; flex-direction:column; min-height:0; }
+
+    /* ✅ Current Auction이 더 큰 비율 차지하도록 */
+    .current-auction-panel{ flex: 1.35; display:flex; flex-direction:column; }
     .current-wrap{ display:flex; flex-direction:column; gap:8px; position:relative; }
 
+    /* ✅ 선수사진 크게 */
     .current-player{
-      display:grid; grid-template-columns:64px 1fr; gap:10px; align-items:center;
+      display:grid;
+      grid-template-columns:92px 1fr; /* 사진 영역 넓힘 */
+      gap:12px;
+      align-items:center;
     }
     .current-player img{
-      width:64px; height:64px; border-radius:14px; object-fit:cover;
-      border:2px solid #3b4f86; background:#0a0f1e;
+      width:92px; height:92px;   /* ✅ 64 → 92로 확대 */
+      border-radius:16px;
+      object-fit:cover;
+      border:3px solid #3b4f86;
+      background:#0a0f1e;
+      box-shadow:0 0 14px rgba(0,0,0,0.55);
     }
-    .current-name{ font-size:16px; font-weight:900; margin-bottom:2px; }
+    .current-name{ font-size:18px; font-weight:900; margin-bottom:4px; }
     .current-meta{
       font-size:12px; color:var(--muted); display:flex; gap:8px; flex-wrap:wrap;
     }
@@ -174,9 +186,9 @@
       border:1px solid var(--line); border-radius:999px;
     }
     .current-bio{
-      margin-top:6px; font-size:12px; color:#cbd7f7; opacity:0.9;
+      margin-top:8px; font-size:12.5px; color:#cbd7f7; opacity:0.95;
       background:var(--panel2); border:1px solid var(--line);
-      border-radius:10px; padding:6px 8px;
+      border-radius:10px; padding:7px 9px;
     }
 
     .bid-box{ display:flex; gap:6px; align-items:center; }
@@ -198,17 +210,18 @@
       border:1px solid var(--line); font-size:12px;
     }
     #timer{
-      font-weight:900; font-size:16px; color:#fff;
+      font-weight:900; font-size:17px; color:#fff;
       padding:2px 8px; border-radius:8px; background:#0c1226; border:1px solid var(--line);
-      min-width:40px; text-align:center;
+      min-width:42px; text-align:center;
     }
 
+    /* ✅ Current Auction 안에서 로그 조금 더 보여주기 */
     .bid-log{
       background:var(--panel2);
       border:1px solid var(--line);
       border-radius:10px;
       padding:6px 8px;
-      height:150px;
+      height:180px;  /* 150 → 180 */
       overflow:auto;
       font-size:12px; line-height:1.45;
     }
@@ -260,9 +273,9 @@
     .overlay-name{ font-size:15px; font-weight:900; color:#fff; white-space:nowrap; }
     .overlay-price{ font-size:13px; color:#cbd7f7; margin-top:2px; font-weight:800; }
 
-    /* ✅ 가운데 아래 로고: 테두리 없이 배경에 자연스럽게 */
+    /* ✅ 로고 영역 비율 ↓ + 로고 이미지 크기 ↓ */
     .center-logo-panel{
-      flex:1;
+      flex: 0.65;             /* 1 → 0.65 로 줄여서 Current Auction이 더 큼 */
       display:flex;
       align-items:center;
       justify-content:center;
@@ -271,14 +284,14 @@
       box-shadow:none;
       border-radius:0;
       padding:0;
-      min-height:180px;
+      min-height:140px;
     }
     .center-logo-panel img{
-      width:72%;
-      max-width:320px;
+      width:52%;              /* 72% → 52% */
+      max-width:220px;        /* 320 → 220 */
       height:auto;
       object-fit:contain;
-      opacity:0.95;
+      opacity:0.92;
       filter: drop-shadow(0 6px 18px rgba(0,0,0,0.6));
     }
 
@@ -341,7 +354,9 @@
       .wrap{ grid-template-columns: 1fr; height:auto; }
       .roster-grid{ grid-template-columns:1fr; }
       .avatars{ grid-template-columns: repeat(5,1fr); }
-      .center-logo-panel img{ width:60%; }
+      .center-logo-panel img{ width:46%; max-width:200px; }
+      .current-player{ grid-template-columns:84px 1fr; }
+      .current-player img{ width:84px; height:84px; }
     }
   </style>
 </head>
@@ -390,8 +405,9 @@
 
     <!-- CENTER COLUMN -->
     <div class="col col-center">
-      <!-- Current Auction -->
-      <div class="panel">
+
+      <!-- ✅ Current Auction (bigger) -->
+      <div class="panel current-auction-panel">
         <div class="panel-title">
           <span>Current Auction</span>
           <span class="badge" id="current-player-status">-</span>
@@ -444,7 +460,7 @@
         </div>
       </div>
 
-      <!-- BIG LOGO -->
+      <!-- ✅ BIG LOGO (smaller) -->
       <div class="center-logo-panel">
         <img src="./assets/logo/cheorwon-esports-logo.png"
              alt="철원군청 e스포츠 동호회 로고">
