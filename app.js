@@ -20,10 +20,10 @@ const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
 /* ===================== ROOM / CONSTANTS ===================== */
-const ROOM_ID = "room1";
+const ROOM_ID = "room1";          // ✅ 최종 방 고정
 const AUCTION_SECONDS = 20;
 const ROLES = ["TOP","JGL","MID","BOT","SUP"];
-const GROUPS = ["A","B"];
+const GROUPS = ["A","B"];         // ✅ A/B만
 
 const LEADERS = {
   leader1:{ name:"팀장 1", teamName:"TEAM 1", startPoints:1000 },
@@ -145,7 +145,7 @@ function listenTeams(){
   });
 }
 
-/* ===================== BID LOG (NO COMPOSITE INDEX) ===================== */
+/* ===================== BID LOG (NO COMPOSITE INDEX + ROUND FILTER) ===================== */
 function listenBidsForCurrent(){
   if(bidsUnsub) bidsUnsub();
   bidLog.innerHTML = "";
@@ -155,14 +155,18 @@ function listenBidsForCurrent(){
 
   const bidsRef = collection(db,"rooms",ROOM_ID,"bids");
   const qy = query(bidsRef, where("playerId","==",currentPlayerId), limit(200));
+  const currentRoundId = roomData?.roundId ?? 0;  // ✅ 현재 라운드
 
   bidsUnsub = onSnapshot(qy, (snap)=>{
     const bids = [];
     snap.forEach(d=>{
       const data = d.data();
+      // ✅ 현재 roundId 입찰만 사용 (이전 경기 최고가 섞임 방지)
+      if((data.roundId ?? 0) !== currentRoundId) return;
       bids.push({ id:d.id, ...data, amount:Number(data.amount||0) });
     });
 
+    // 최고가 계산
     bids.sort((a,b)=>{
       if(a.amount !== b.amount) return a.amount - b.amount;
       return (a.createdAtMs||0) - (b.createdAtMs||0);
@@ -173,8 +177,12 @@ function listenBidsForCurrent(){
       highestAmountSpan.textContent = top.amount;
       highestLeaderSpan.textContent =
         LEADERS[top.leaderId]?.name || top.leaderName || top.leaderId;
+    }else{
+      highestAmountSpan.textContent = "-";
+      highestLeaderSpan.textContent = "-";
     }
 
+    // 로그 표시(시간 최신순)
     const bidsByTime = bids.slice().sort((a,b)=>{
       const at = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAtMs||0);
       const bt = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAtMs||0);
@@ -399,15 +407,19 @@ async function startPhase(phase, isTest=false){
   });
 }
 
-/* 최고가를 인덱스 없이 구함 */
+/* 최고가를 인덱스 없이 + 현재 라운드만 */
 async function getTopBidNoIndex(playerId){
   const bidsRef = collection(db,"rooms",ROOM_ID,"bids");
   const qy = query(bidsRef, where("playerId","==",playerId), limit(200));
   const snap = await getDocs(qy);
 
+  const currentRoundId = roomData?.roundId ?? 0; // ✅ 현재 라운드
+
   let top = null;
   snap.forEach(d=>{
     const b = d.data();
+    if((b.roundId ?? 0) !== currentRoundId) return; // ✅ 라운드 필터
+
     const amt = Number(b.amount||0);
     const tms = b.createdAtMs || 0;
     if(!top || amt > top.amount || (amt === top.amount && tms > (top.createdAtMs||0))){
@@ -526,7 +538,7 @@ function showSoldOverlay(teamName, p, amount){
 }
 
 /* ===================== FULL RESET (incl. bids) ===================== */
-// ✅ bids 컬렉션 전체 삭제
+// ✅ bids 전체 삭제
 async function deleteAllBids(){
   const bidsCol = collection(db, "rooms", ROOM_ID, "bids");
   const snap = await getDocs(bidsCol);
@@ -539,12 +551,14 @@ async function deleteAllBids(){
   }
 }
 
+// ✅ 운영자 리셋(확인창 있음)
 async function resetAll(){
   const ok = confirm(
-    "전체 리셋을 진행할까요?\n\n" +
-    "• 모든 입찰 로그(bids)가 삭제됩니다.\n" +
+    "【포인트/전체 리셋】\n\n" +
+    "• 모든 입찰 로그가 삭제됩니다.\n" +
     "• 모든 낙찰/미낙찰 결과가 초기화됩니다.\n" +
-    "• 팀 포인트/로스터가 초기화됩니다."
+    "• 팀 포인트/로스터가 초기화됩니다.\n\n" +
+    "계속할까요?"
   );
   if(!ok) return;
 
@@ -553,10 +567,8 @@ async function resetAll(){
   const teamsCol   = collection(db,"rooms",ROOM_ID,"teams");
 
   try{
-    // 1) bids 삭제
     await deleteAllBids();
 
-    // 2) players 초기화
     const pSnap = await getDocs(playersCol);
     for (const d of pSnap.docs){
       await updateDoc(d.ref,{
@@ -566,7 +578,6 @@ async function resetAll(){
       });
     }
 
-    // 3) teams 초기화
     const tSnap = await getDocs(teamsCol);
     for (const d of tSnap.docs){
       await setDoc(d.ref,{
@@ -577,7 +588,6 @@ async function resetAll(){
       },{merge:true});
     }
 
-    // 4) room 초기화 (결과/라운드 완전 초기화)
     await setDoc(roomRef,{
       status:"waiting",
       phase:"A",
@@ -588,14 +598,52 @@ async function resetAll(){
       updatedAt: serverTimestamp()
     },{merge:true});
 
-    alert("✅ 전체 리셋 완료! (입찰/낙찰 기록까지 전부 초기화됨)");
+    alert("✅ 전체 리셋 완료!");
   }catch(e){
     console.error(e);
     alert("리셋 오류: " + (e.message || e.code));
   }
 }
 
-/* ===================== BIDDING (A>=400, B>=100) ===================== */
+// ✅ 본경매 시작용 “조용한” 완전 리셋(확인창 없음)
+async function silentResetAll(){
+  const roomRef    = doc(db,"rooms",ROOM_ID);
+  const playersCol = collection(db,"rooms",ROOM_ID,"players");
+  const teamsCol   = collection(db,"rooms",ROOM_ID,"teams");
+
+  await deleteAllBids();
+
+  const pSnap = await getDocs(playersCol);
+  for (const d of pSnap.docs){
+    await updateDoc(d.ref,{
+      status:"available",
+      assignedTeamId:null,
+      finalPrice:null
+    });
+  }
+
+  const tSnap = await getDocs(teamsCol);
+  for (const d of tSnap.docs){
+    await setDoc(d.ref,{
+      name: LEADERS[d.id]?.teamName || d.id,
+      pointsStart: LEADERS[d.id]?.startPoints || 1000,
+      pointsUsed:0,
+      roster:{}
+    },{merge:true});
+  }
+
+  await setDoc(roomRef,{
+    status:"waiting",
+    phase:"A",
+    isTest:false,
+    currentPlayerId:null,
+    endsAtMs:null,
+    roundId:0,
+    updatedAt: serverTimestamp()
+  },{merge:true});
+}
+
+/* ===================== BIDDING (A>=400, B>=100 + basePrice, 5단위, 최고가+5) ===================== */
 bidButton.addEventListener("click", async ()=>{
   if(!roomData || roomData.status!=="bidding" || !currentPlayerId) return;
   if(!selectedRole.startsWith("leader")) return;
@@ -676,14 +724,34 @@ roleSelect.addEventListener("change", ()=>{
 });
 
 /* ===================== ADMIN BUTTONS ===================== */
+// 테스트 시작(A부터)
 btnStartTest?.addEventListener("click", ()=> startPhase("A", true));
+
+// ✅ 본경매 시작: “본 경매 시작” 전용 안내창 → OK면 silentResetAll 후 시작
 btnStartReal?.addEventListener("click", async ()=>{
-  await resetAll();
-  // resetAll에서 취소 눌렀으면 경매 시작 안 하게
-  if(roomData?.status !== "waiting") return;
-  await startPhase("A", false);
+  const ok = confirm(
+    "【본 경매 시작】\n\n" +
+    "지금부터 본 경매를 시작합니다.\n" +
+    "• 기존 테스트/입찰 로그/낙찰 결과/포인트가 전부 초기화됩니다.\n" +
+    "• A그룹부터 순서대로 진행됩니다.\n\n" +
+    "계속할까요?"
+  );
+  if(!ok) return;
+
+  try{
+    await silentResetAll();
+    await startPhase("A", false);
+    alert("✅ 본 경매가 시작되었습니다!");
+  }catch(e){
+    console.error(e);
+    alert("본경매 시작 오류: " + (e.message || e.code));
+  }
 });
+
+// 잔여 재경매 시작
 btnStartRemaining?.addEventListener("click", ()=> startPhase("REMAIN", roomData?.isTest));
+
+// 운영자 리셋(확인창 포함)
 btnReset?.addEventListener("click", resetAll);
 
 /* ===================== INIT ===================== */
