@@ -58,8 +58,7 @@
     .teams-wrap{gap:10px; display:flex; flex-direction:column; min-height:0; overflow:auto;}
     .team-card{
       background:var(--panel2); border:2px solid var(--line);
-      border-radius:14px; padding:10px;
-      position:relative;
+      border-radius:14px; padding:10px; position:relative;
       box-shadow: inset 0 0 0 2px rgba(255,255,255,0.02);
     }
     .team-card::before{
@@ -74,7 +73,6 @@
     .team-name{font-size:15px;}
     .team-points{font-size:13px; color:var(--muted);}
 
-    /* Slots injected by app.js */
     .team-row{
       display:grid; grid-template-columns: repeat(5,1fr); gap:6px;
     }
@@ -86,13 +84,12 @@
     }
     .slot img{
       width:58px; height:58px; object-fit:cover; border-radius:8px;
-      border:1px solid #2a3258;
-      background:#000;
+      border:1px solid #2a3258; background:#000;
     }
     .slot-text{ text-align:center; line-height:1.15; }
     .slot-name{ font-size:13px; font-weight:800; }
     .slot-price{ font-size:11px; color:var(--muted); font-weight:700; margin-top:2px;}
-    .slot-label{ display:none; } /* ✅ role 무시 UI: 라벨 숨김 */
+    .slot-label{ display:none; }
     .slot.empty{ opacity:.45; }
 
     /* ===== Middle: Current Auction ===== */
@@ -104,8 +101,7 @@
     }
     .current-photo{
       width:100%; aspect-ratio: 1 / 1; border-radius:12px; object-fit:cover;
-      border:2px solid var(--line); background:#000;
-      max-height:320px;
+      border:2px solid var(--line); background:#000; max-height:320px;
     }
     .current-info{display:flex; flex-direction:column; gap:6px;}
     .current-name{font-size:22px; font-weight:900;}
@@ -118,6 +114,17 @@
     .status-pill{
       align-self:flex-start; font-size:12px; font-weight:800;
       padding:4px 8px; border-radius:999px; background:#182043; border:1px solid var(--line);
+    }
+
+    .time-card{
+      background:var(--panel2); border:1px solid var(--line);
+      border-radius:14px; padding:12px; display:flex; align-items:center; justify-content:space-between;
+    }
+    .time-left{display:flex; flex-direction:column; gap:4px;}
+    .time-title{font-size:13px; color:var(--muted); font-weight:800;}
+    .time-player{font-size:18px; font-weight:900;}
+    .time-count{
+      font-size:40px; font-weight:900; letter-spacing:1px; color:var(--warn);
     }
 
     .bid-box{
@@ -136,20 +143,27 @@
     .bid-row button:disabled{opacity:.45; cursor:not-allowed;}
     .bid-stats{font-size:13px; color:var(--muted); display:flex; justify-content:space-between;}
 
-    /* ===== Right: Time + Groups + Log ===== */
-    .time-wrap{gap:10px; display:flex; flex-direction:column; min-height:0;}
-    .time-card{
-      background:var(--panel2); border:1px solid var(--line);
-      border-radius:14px; padding:12px; display:flex; align-items:center; justify-content:space-between;
+    .logo-area{
+      display:flex; justify-content:center; align-items:center;
+      background:transparent; border:none; padding:2px 0 0 0;
     }
-    .time-left{display:flex; flex-direction:column; gap:4px;}
-    .time-title{font-size:13px; color:var(--muted); font-weight:800;}
-    .time-player{font-size:18px; font-weight:900;}
-    .time-count{
-      font-size:40px; font-weight:900; letter-spacing:1px;
-      color:var(--warn);
+    .logo-area img{
+      max-width:75%; max-height:90px; object-fit:contain;
+      filter: drop-shadow(0 6px 18px rgba(0,0,0,.45));
     }
 
+    /* ✅ Bid log now in middle, make it fill remaining height */
+    .log-card{
+      background:var(--panel2); border:1px solid var(--line);
+      border-radius:14px; padding:10px;
+      min-height:180px; flex:1; overflow:auto;
+    }
+    .log-card .item{
+      font-size:13px; padding:4px 0; border-bottom:1px dashed rgba(255,255,255,0.06);
+    }
+
+    /* ===== Right: Groups only ===== */
+    .right-wrap{gap:10px; display:flex; flex-direction:column; min-height:0;}
     .groups-card{
       background:var(--panel2); border:1px solid var(--line);
       border-radius:14px; padding:10px; flex:1; min-height:0;
@@ -165,7 +179,7 @@
       position:relative; display:flex; flex-direction:column; align-items:center; gap:4px;
     }
     .avatar img{
-      width:64px; height:64px; object-fit:cover; border-radius:8px; /* ✅ 사각형 */
+      width:66px; height:66px; object-fit:cover; border-radius:8px;
       border:2px solid transparent; background:#000;
     }
     .avatar .name-tip{font-size:11px; font-weight:800; text-align:center; max-width:70px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
@@ -175,14 +189,6 @@
     .avatar.sold-by-leader2 img{border-color:#ff7ad6;}
     .avatar.sold-by-leader3 img{border-color:#62e7a7;}
     .avatar.sold-by-leader4 img{border-color:#ffcc66;}
-
-    .log-card{
-      background:var(--panel2); border:1px solid var(--line);
-      border-radius:14px; padding:10px; min-height:170px; max-height:250px; overflow:auto;
-    }
-    .log-card .item{
-      font-size:13px; padding:4px 0; border-bottom:1px dashed rgba(255,255,255,0.06);
-    }
 
     /* ===== Controls ===== */
     .controls{display:flex; gap:8px; align-items:center;}
@@ -196,16 +202,6 @@
       padding:6px 10px; border-radius:10px; font-weight:800; cursor:pointer;
     }
     .admin-controls button:hover{filter:brightness(1.12);}
-
-    /* ===== Logo area (under time count) ===== */
-    .logo-area{
-      display:flex; justify-content:center; align-items:center;
-      background:transparent; border:none; padding:4px;
-    }
-    .logo-area img{
-      max-width:90%; max-height:120px; object-fit:contain;
-      filter: drop-shadow(0 6px 18px rgba(0,0,0,.45));
-    }
 
     /* ===== Sold Overlay ===== */
     .overlay{
@@ -229,7 +225,6 @@
     @keyframes fadeIn{from{opacity:0}to{opacity:1}}
     @keyframes pop{from{transform:scale(.92)}to{transform:scale(1)}}
 
-    /* Scroll bar subtle */
     ::-webkit-scrollbar{height:8px;width:8px}
     ::-webkit-scrollbar-thumb{background:#2a3258;border-radius:10px}
     ::-webkit-scrollbar-track{background:transparent}
@@ -239,7 +234,7 @@
 <body>
   <div class="page">
 
-    <!-- LEFT: TEAM ROSTERS (full height) -->
+    <!-- LEFT: TEAM ROSTERS -->
     <section class="panel">
       <div class="panel-header">
         <div class="title">TEAM ROSTER</div>
@@ -258,7 +253,7 @@
       </div>
     </section>
 
-    <!-- MIDDLE: CURRENT AUCTION -->
+    <!-- MIDDLE: CURRENT AUCTION + TIME + BIDS + LOG -->
     <section class="panel current-wrap">
       <div class="panel-header">
         <div class="title">CURRENT AUCTION</div>
@@ -298,6 +293,16 @@
         </div>
       </div>
 
+      <!-- TIME COUNT -->
+      <div class="time-card">
+        <div class="time-left">
+          <div class="time-title">현재 경매중</div>
+          <div class="time-player" id="timer-player-name">-</div>
+        </div>
+        <div class="time-count" id="timer">-</div>
+      </div>
+
+      <!-- BID INPUT -->
       <div class="bid-box">
         <div class="bid-row">
           <input id="bid-amount" type="number" placeholder="입찰 금액(5점 단위)" step="5" min="0">
@@ -308,26 +313,20 @@
           <div>최고가: <b id="highest-amount">-</b>점</div>
           <div>최고 입찰: <b id="highest-leader">-</b></div>
         </div>
+
+        <div class="logo-area">
+          <img src="./assets/cheorwon-esports-logo.png" alt="cheorwon esports logo">
+        </div>
       </div>
+
+      <!-- ✅ BID LOG moved to middle -->
+      <div class="log-card" id="bid-log"></div>
     </section>
 
-    <!-- RIGHT: TIME COUNT + GROUPS + LOG + LOGO -->
-    <section class="panel time-wrap">
+    <!-- RIGHT: GROUPS ONLY -->
+    <section class="panel right-wrap">
       <div class="panel-header">
-        <div class="title">TIME COUNT</div>
-      </div>
-
-      <div class="time-card">
-        <div class="time-left">
-          <div class="time-title">현재 경매중</div>
-          <div class="time-player" id="timer-player-name">-</div>
-        </div>
-        <div class="time-count" id="timer">-</div>
-      </div>
-
-      <!-- ✅ 로고는 Time Count 아래 공간에 박아둠 -->
-      <div class="logo-area">
-        <img src="./assets/cheorwon-esports-logo.png" alt="cheorwon esports logo">
+        <div class="title">GROUP ROSTER</div>
       </div>
 
       <div class="groups-card">
@@ -337,8 +336,6 @@
         <div class="group-title">GROUP B</div>
         <div class="group-grid" id="roster-B"></div>
       </div>
-
-      <div class="log-card" id="bid-log"></div>
     </section>
   </div>
 
@@ -352,7 +349,6 @@
     </div>
   </div>
 
-  <!-- App -->
   <script type="module" src="./app.js"></script>
 </body>
 </html>
