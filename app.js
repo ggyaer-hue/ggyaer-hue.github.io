@@ -20,10 +20,10 @@ const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
 /* ===================== ROOM / CONSTANTS ===================== */
-const ROOM_ID = "room1";   // ✅ 최종 방: room1 고정
+const ROOM_ID = "room1";   // ✅ 최종 방
 const AUCTION_SECONDS = 20;
 const ROLES = ["TOP","JGL","MID","BOT","SUP"];
-const GROUPS = ["A","B"];  // ✅ A/B만 사용
+const GROUPS = ["A","B"];  // ✅ A/B만
 
 const LEADERS = {
   leader1:{ name:"팀장 1", teamName:"TEAM 1", startPoints:1000 },
@@ -42,7 +42,6 @@ let teamsMap = new Map();
 let allPlayers = [];
 let currentPlayerId = null;
 let selectedRole = "viewer";
-
 let timerInterval = null;
 let bidsUnsub = null;
 
@@ -72,6 +71,7 @@ const highestAmountSpan = document.getElementById("highest-amount");
 const highestLeaderSpan = document.getElementById("highest-leader");
 const bidLog = document.getElementById("bid-log");
 const timerEl = document.getElementById("timer");
+const timerPlayerNameEl = document.getElementById("timer-player-name"); // ✅ TIME COUNT 옆 이름
 
 const overlay = document.getElementById("auction-overlay");
 const overlayTeam = document.getElementById("auction-overlay-team");
@@ -98,7 +98,7 @@ const normalizeRole = (r)=>{
 };
 const normalizeGroupAB = (gRaw)=>{
   const m = String(gRaw||"").toUpperCase().match(/[AB]/);
-  return m ? m[0] : "B"; // group 없으면 B로 기본
+  return m ? m[0] : "B";
 };
 const roundUp5 = (n)=>{
   n = Number(n||0);
@@ -145,7 +145,7 @@ function listenTeams(){
   });
 }
 
-/* ===================== ✅ BID LOG (NO COMPOSITE INDEX) ===================== */
+/* ===================== BID LOG (NO COMPOSITE INDEX) ===================== */
 function listenBidsForCurrent(){
   if(bidsUnsub) bidsUnsub();
   bidLog.innerHTML = "";
@@ -156,7 +156,7 @@ function listenBidsForCurrent(){
 
   const bidsRef = collection(db,"rooms",ROOM_ID,"bids");
 
-  // ✅ orderBy 제거 → 복합 인덱스 불필요
+  // ✅ orderBy 제거 → 인덱스 없이 동작
   const qy = query(
     bidsRef,
     where("playerId","==",currentPlayerId),
@@ -170,7 +170,7 @@ function listenBidsForCurrent(){
       bids.push({ id:d.id, ...data, amount:Number(data.amount||0) });
     });
 
-    // 최고가 계산(금액 기준)
+    // 최고가 계산
     bids.sort((a,b)=>{
       if(a.amount !== b.amount) return a.amount - b.amount;
       return (a.createdAtMs||0) - (b.createdAtMs||0);
@@ -181,12 +181,9 @@ function listenBidsForCurrent(){
       highestAmountSpan.textContent = top.amount;
       highestLeaderSpan.textContent =
         LEADERS[top.leaderId]?.name || top.leaderName || top.leaderId;
-    }else{
-      highestAmountSpan.textContent = "-";
-      highestLeaderSpan.textContent = "-";
     }
 
-    // 로그 표시용(시간 최신순)
+    // 로그 표시(시간 최신순)
     const bidsByTime = bids.slice().sort((a,b)=>{
       const at = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAtMs||0);
       const bt = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAtMs||0);
@@ -217,7 +214,7 @@ function updateStatusUI(){
     st==="finished" ? "종료" : "대기중";
 
   const phase = roomData?.phase || "A";
-  const test = roomData?.isTest ? "TEST" : "REAL";
+  const test  = roomData?.isTest ? "TEST" : "REAL";
   modeBadge.textContent = `${ROOM_ID.toUpperCase()} · ${test} · ${phase}`;
 
   const canBid = (st==="bidding" && selectedRole.startsWith("leader"));
@@ -234,8 +231,10 @@ function updateCurrentPlayerUI(){
     currentBaseEl.textContent = "-";
     currentBioEl.textContent = "-";
     currentStatusBadge.textContent = "대기";
+    if(timerPlayerNameEl) timerPlayerNameEl.textContent = "-"; // ✅
     return;
   }
+
   currentPhoto.src = p.photoUrl || "./assets/players/default.png";
   currentName.textContent = p.name || p.id;
   currentRoleEl.textContent = normalizeRole(p.role);
@@ -245,6 +244,8 @@ function updateCurrentPlayerUI(){
   currentStatusBadge.textContent =
     roomData?.status==="bidding" ? "입찰중" :
     p.status==="sold" ? "SOLD" : "대기";
+
+  if(timerPlayerNameEl) timerPlayerNameEl.textContent = p.name || p.id || "-"; // ✅
 
   renderGroupRosters();
 }
@@ -261,8 +262,8 @@ function renderTeams(){
     const info = LEADERS[leaderId];
     const team = teamsMap.get(leaderId);
 
-    const start = team?.pointsStart ?? info.startPoints;
-    const used  = team?.pointsUsed ?? 0;
+    const start  = team?.pointsStart ?? info.startPoints;
+    const used   = team?.pointsUsed ?? 0;
     const remain = start - used;
 
     const rawRoster = team?.roster || {};
@@ -280,9 +281,9 @@ function renderTeams(){
       const p = pid ? byId(pid) : null;
       const has = !!p;
 
-      const nameText = has ? (p.name || pid) : "";
+      const nameText  = has ? (p.name || pid) : "";
       const priceText = has && p.finalPrice ? `${p.finalPrice}점` : "";
-      const imgHtml = has
+      const imgHtml   = has
         ? `<img src="${p.photoUrl || "./assets/players/default.png"}" />`
         : "";
 
@@ -349,10 +350,12 @@ function startCountdown(endsAtMs){
     timerEl.textContent = "-";
     return;
   }
+
   const tick = ()=>{
     const leftMs = endsAtMs - Date.now();
     const left = Math.max(0, Math.ceil(leftMs/1000));
     timerEl.textContent = left;
+
     if(left<=0){
       clearInterval(timerInterval);
       timerInterval=null;
@@ -393,6 +396,7 @@ async function pickNextPlayerId(phase){
 async function startPhase(phase, isTest=false){
   const roomRef = doc(db,"rooms",ROOM_ID);
   const nextId = await pickNextPlayerId(phase);
+
   if(!nextId){
     if(phase==="A") return startPhase("B", isTest);
     if(phase==="B") return startPhase("REMAIN", isTest);
@@ -410,28 +414,24 @@ async function startPhase(phase, isTest=false){
   });
 }
 
-/* ✅ 인덱스 없이 최고가 찾기 */
+/* 최고가를 인덱스 없이 구함 */
 async function getTopBidNoIndex(playerId){
   const bidsRef = collection(db,"rooms",ROOM_ID,"bids");
   const qy = query(bidsRef, where("playerId","==",playerId), limit(200));
   const snap = await getDocs(qy);
+
   let top = null;
   snap.forEach(d=>{
     const b = d.data();
     const amt = Number(b.amount||0);
     const tms = b.createdAtMs || 0;
-    if(
-      !top ||
-      amt > top.amount ||
-      (amt === top.amount && tms > (top.createdAtMs||0))
-    ){
+    if(!top || amt > top.amount || (amt === top.amount && tms > (top.createdAtMs||0))){
       top = { id:d.id, ...b, amount:amt, createdAtMs:tms };
     }
   });
   return top;
 }
 
-/* ✅ 트랜잭션 오류 해결 버전 Finalize */
 async function finalizeCurrentAndNext(){
   const phase = roomData?.phase || "A";
   const playerId = roomData?.currentPlayerId;
@@ -440,10 +440,8 @@ async function finalizeCurrentAndNext(){
   const roomRef   = doc(db,"rooms",ROOM_ID);
   const playerRef = doc(db,"rooms",ROOM_ID,"players",playerId);
 
-  // 1) 최고 입찰을 트랜잭션 밖에서 안전하게 계산
   const topBid = await getTopBidNoIndex(playerId);
 
-  // 2) 상태 업데이트는 트랜잭션으로 원자 처리
   await runTransaction(db, async (tx)=>{
     const pSnap = await tx.get(playerRef);
     const rSnap = await tx.get(roomRef);
@@ -464,7 +462,6 @@ async function finalizeCurrentAndNext(){
 
       const roster = {...(t.roster||{})};
 
-      // 라인 이미 찼으면 미낙찰 처리
       if(roster[role]){
         tx.update(playerRef,{
           status:"unsold",
@@ -490,7 +487,6 @@ async function finalizeCurrentAndNext(){
         },{merge:true});
       }
     }else{
-      // 입찰 0이면 unsold
       tx.update(playerRef,{ status:"unsold", updatedAt:serverTimestamp() });
     }
 
@@ -501,7 +497,6 @@ async function finalizeCurrentAndNext(){
     });
   });
 
-  // 3) 오버레이
   if(topBid){
     const leaderName = LEADERS[topBid.leaderId]?.name || topBid.leaderName || topBid.leaderId;
     const p = playersMap.get(playerId);
@@ -509,7 +504,6 @@ async function finalizeCurrentAndNext(){
     await sleep(600);
   }
 
-  // 4) 다음 선수/페이즈 이동
   const nextId = await pickNextPlayerId(phase);
   if(nextId){
     await updateDoc(roomRef,{
@@ -650,8 +644,8 @@ bidButton.addEventListener("click", async ()=>{
       leaderId: selectedRole,
       leaderName: leaderInfo.name,
       amount,
-      createdAt: serverTimestamp(), // 서버시간
-      createdAtMs: Date.now()        // ✅ 정렬/표시용 로컬시간
+      createdAt: serverTimestamp(),
+      createdAtMs: Date.now()
     });
     bidInput.value = "";
   }catch(e){
