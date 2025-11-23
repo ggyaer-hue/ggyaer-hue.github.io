@@ -323,10 +323,10 @@
       padding:4px 0;
     }
 
-    /* ✅ 그룹 로스터 사진: 사각형 */
+    /* ✅ 그룹 로스터 사진: 사각형 + 더 크게 */
     .avatar img{
-      width:58px; height:58px;
-      border-radius:8px;  /* 원형 → 사각형 */
+      width:68px; height:68px;
+      border-radius:8px;
       object-fit:cover;
       border:2px solid #3b4f86; background:#0a0f1e;
       filter:saturate(1.05); transition:all .2s ease;
@@ -343,7 +343,7 @@
 
     .name-tip{
       font-size:11px; color:#e7eeff; font-weight:700;
-      text-align:center; max-width:70px;
+      text-align:center; max-width:86px;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
 
@@ -446,7 +446,7 @@
             <div>리더: <b id="highest-leader">-</b></div>
           </div>
 
-          <!-- ✅ TIME COUNT + 현재 선수 이름 -->
+          <!-- TIME COUNT + 현재 선수 이름 -->
           <div class="timer-bar">
             <div class="timer-left">
               <span>TIME COUNT</span>
