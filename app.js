@@ -71,6 +71,7 @@ const bidButton = document.getElementById("bid-button");
 const highestAmountSpan = document.getElementById("highest-amount");
 const highestLeaderSpan = document.getElementById("highest-leader");
 const bidLog = document.getElementById("bid-log");
+
 const timerEl = document.getElementById("timer");
 const timerPlayerNameEl = document.getElementById("timer-player-name");
 
@@ -221,7 +222,7 @@ function updateStatusUI(){
 
   const phase = roomData?.phase || "A";
   const test  = roomData?.isTest ? "TEST" : "REAL";
-  modeBadge.textContent = `${ROOM_ID.toUpperCase()} · ${test} · ${phase}`;
+  if(modeBadge) modeBadge.textContent = `${ROOM_ID.toUpperCase()} · ${test} · ${phase}`;
 
   bidButton.disabled = !(st==="bidding" && selectedRole.startsWith("leader"));
 }
@@ -251,7 +252,6 @@ function updateCurrentPlayerUI(){
     p.status==="sold" ? "SOLD" : "대기";
 
   if(timerPlayerNameEl) timerPlayerNameEl.textContent = p.name || p.id || "-";
-
   renderGroupRosters();
 }
 
@@ -272,12 +272,10 @@ function renderTeams(){
     const used   = team?.pointsUsed ?? 0;
     const remain = start - used;
 
-    // ✅ rosterList가 있으면 그 순서대로 슬롯 채움 (role 무관)
     let orderIds = [];
     if(Array.isArray(team?.rosterList) && team.rosterList.length){
       orderIds = team.rosterList.map(x=>x.playerId);
     }else{
-      // fallback: assignedTeamId 기반
       const assigned = allPlayers.filter(p=>p.assignedTeamId===leaderId);
       assigned.sort((a,b)=>stableOrderIndex(a)-stableOrderIndex(b));
       orderIds = assigned.map(p=>p.id);
@@ -444,6 +442,7 @@ async function startPhase(phase, isTest=false){
   });
 }
 
+/* === index 없이 최고 입찰 찾기 === */
 async function getTopBidNoIndex(playerId){
   const roomRef = doc(db,"rooms",ROOM_ID);
   const rSnap = await getDoc(roomRef);
@@ -495,10 +494,9 @@ async function finalizeCurrentAndNext(){
         ? tSnap.data()
         : {pointsStart:1000,pointsUsed:0,roster:{},rosterList:[]};
 
-      const roster = {...(t.roster||{})}; // UI 호환용
+      const roster = {...(t.roster||{})};
       const rosterList = Array.isArray(t.rosterList) ? [...t.rosterList] : [];
 
-      // ✅ rosterList에 누적(중복 방지)
       if(!rosterList.some(x=>x.playerId===playerId)){
         rosterList.push({
           playerId,
@@ -508,11 +506,9 @@ async function finalizeCurrentAndNext(){
         });
       }
 
-      // ✅ UI 슬롯도 채우되, role은 무시하고 "첫 빈 슬롯"에 넣음
       const firstEmpty = ROLES.find(r=>!roster[r]);
       if(firstEmpty) roster[firstEmpty] = playerId;
 
-      // 선수는 무조건 sold + assignedTeamId
       tx.update(playerRef,{
         status:"sold",
         assignedTeamId: leaderId,
@@ -530,7 +526,6 @@ async function finalizeCurrentAndNext(){
       },{merge:true});
 
     }else{
-      // 입찰 없으면 유찰
       tx.update(playerRef,{ status:"unsold", updatedAt:serverTimestamp() });
     }
 
@@ -543,9 +538,10 @@ async function finalizeCurrentAndNext(){
   });
 
   if(topBid){
-    const leaderName = LEADERS[topBid.leaderId]?.name || topBid.leaderName || topBid.leaderId;
+    const leaderId = topBid.leaderId;
+    const leaderName = LEADERS[leaderId]?.name || topBid.leaderName || leaderId;
     const p = playersMap.get(playerId);
-    showSoldOverlay(leaderName, p, topBid.amount);
+    showSoldOverlay(leaderId, leaderName, p, topBid.amount);
     await sleep(600);
   }
 
@@ -576,15 +572,23 @@ async function finishAuction(){
   });
 }
 
-function showSoldOverlay(teamName, p, amount){
+/* ✅ 낙찰 팝업 자동 종료 포함 버전 */
+let overlayHideTimer = null;
+function showSoldOverlay(leaderId, teamName, p, amount){
   overlayTeam.textContent = `SOLD · ${teamName}`;
-  overlayTeam.style.color = TEAM_COLORS[p?.assignedTeamId] || "#fff";
+  overlayTeam.style.color = TEAM_COLORS[leaderId] || "#fff";
   overlayPhoto.src = p?.photoUrl || "./assets/players/default.png";
   overlayName.textContent = p?.name || p?.id || "-";
   overlayPrice.textContent = `${amount}점`;
+
   overlay.classList.remove("show");
   void overlay.offsetWidth;
   overlay.classList.add("show");
+
+  if(overlayHideTimer) clearTimeout(overlayHideTimer);
+  overlayHideTimer = setTimeout(()=>{
+    overlay.classList.remove("show");
+  }, 1200);
 }
 
 /* ===================== RESET (incl. bids) ===================== */
@@ -748,7 +752,6 @@ bidButton.addEventListener("click", async ()=>{
     return;
   }
 
-  // ✅ role 슬롯 체크 삭제 (role 무관 경매)
   const group = normalizeGroupAB(p.group);
   const groupMin = (group==="A") ? 400 : 100;
 
@@ -779,7 +782,7 @@ bidButton.addEventListener("click", async ()=>{
 /* ===================== ROLE SELECT ===================== */
 roleSelect.addEventListener("change", ()=>{
   selectedRole = roleSelect.value;
-  adminControls.style.display = (selectedRole==="operator") ? "flex" : "none";
+  if(adminControls) adminControls.style.display = (selectedRole==="operator") ? "flex" : "none";
   updateStatusUI();
 });
 
