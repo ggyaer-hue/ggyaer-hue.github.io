@@ -1,765 +1,603 @@
-// app.js (ROOM1, Group A/B only, GitHub players images)
-// -------------------------------------------------
+// app.js (ROOM1 FINAL, GROUP A/B only)
+// -----------------------------------
 import { app, db } from "./firebase-config.js";
 import {
-  collection, doc, getDoc, getDocs, onSnapshot, query, orderBy, limit,
-  runTransaction, updateDoc, setDoc, serverTimestamp, increment, writeBatch
+  collection, doc, getDoc, getDocs, onSnapshot, query, orderBy,
+  runTransaction, updateDoc, setDoc, serverTimestamp,
+  writeBatch, increment, where, addDoc, deleteDoc
 } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
 // ====== CONSTANTS ======
 const ROOM_ID = "room1";
-const AUCTION_SECONDS = 15;              // 기본 경매 시간
-const BID_STEP = 5;                      // 5점 단위
+const AUCTION_SECONDS = 15;
+const BID_STEP = 5;
 const TEAM_START_POINTS = 1000;
 
-// ✅ 그룹별 최소 입찰 하한가
-const MIN_BID_BY_GROUP = {
-  A: 300,  // A 최소 300점
-  B: 0     // B는 0부터
-};
+// 그룹별 최소 입찰 하한가
+const MIN_BID_BY_GROUP = { A: 300, B: 0 };
 
-// ====== REFS ======
-const roomRef   = doc(db, "rooms", ROOM_ID);
-const playersCol= collection(db, "rooms", ROOM_ID, "players");
-const teamsCol  = collection(db, "rooms", ROOM_ID, "teams");
-const bidsCol   = collection(db, "rooms", ROOM_ID, "bids");
+// ====== FIRESTORE REFS ======
+const roomRef = doc(db, "rooms", ROOM_ID);
+const playersCol = collection(db, "rooms", ROOM_ID, "players");
+const teamsCol   = collection(db, "rooms", ROOM_ID, "teams");
+const logsCol    = collection(db, "rooms", ROOM_ID, "logs");
 
-// ====== DOM ======
-const $ = (id)=>document.getElementById(id);
+// ====== DOM HELPERS ======
+const el = (id) => document.getElementById(id);
+const qs = (sel) => document.querySelector(sel);
 
-const roleSelect       = $("role-select");
-const adminControls    = $("admin-controls");
-const btnStartTest     = $("btn-start-test");
-const btnStartReal     = $("btn-start-real");
-const btnStartRemain   = $("btn-start-remaining");
-const btnReset         = $("btn-reset");
+function text(id, v) { const n = el(id); if (n) n.textContent = v ?? ""; }
+function show(id, on=true){ const n=el(id); if(n) n.style.display=on?"":"none"; }
 
-const teamEls = {
-  leader1: $("team-leader1"),
-  leader2: $("team-leader2"),
-  leader3: $("team-leader3"),
-  leader4: $("team-leader4"),
-};
-
-const currentPhoto     = $("current-player-photo");
-const currentName      = $("current-player-name");
-const currentRole      = $("current-player-role");
-const currentGroupEl   = $("current-player-group");
-const currentBase      = $("current-player-base");
-const currentBio       = $("current-player-bio");
-const currentStatusPill= $("current-player-status");
-
-const timerEl          = $("timer");
-const timerPlayerNameEl= $("timer-player-name");
-
-const bidInput         = $("bid-amount");
-const bidBtn           = $("bid-button");
-const highestAmountEl  = $("highest-amount");
-const highestLeaderEl  = $("highest-leader");
-
-const rosterAEl        = $("roster-A");
-const rosterBEl        = $("roster-B");
-const bidLogEl         = $("bid-log");
-
-const statusDot        = $("room-status-dot");
-const statusText       = $("room-status-text");
-const modeBadge        = $("mode-badge");
-
-const overlay          = $("auction-overlay");
-const overlayTeam      = $("auction-overlay-team");
-const overlayPhoto     = $("auction-overlay-photo");
-const overlayName      = $("auction-overlay-name");
-const overlayPrice     = $("auction-overlay-price");
+// 유연한 컨테이너 찾기(인덱스 id명이 달라도 최대한 잡아줌)
+function getGroupContainer(g){
+  return el(`group${g}List`)
+      || qs(`#group${g}List`)
+      || qs(`[data-group="${g}"]`)
+      || qs(`#group-${g.toLowerCase()}`)
+      || null;
+}
+function getTeamContainer(i){
+  return el(`team${i}Roster`)
+      || qs(`#team${i}Roster`)
+      || qs(`[data-team="${i}"] .team-roster`)
+      || qs(`#team-${i} .team-roster`)
+      || qs(`#team${i} .team-roster`)
+      || null;
+}
+function getTeamPointsEl(i){
+  return el(`team${i}Points`) || qs(`#team${i}Points`) || qs(`[data-team="${i}"] .team-points`);
+}
 
 // ====== STATE ======
-let myRole = localStorage.getItem("cw_role") || "viewer";
-if (roleSelect) roleSelect.value = myRole;
-
 let roomState = null;
-let playersCache = [];
-let teamsCache = {};
-let timerInterval = null;
-let lastOverlayKey = null;
-let lastOverlayAt = 0;
+let players = [];    // all players
+let teams = [];      // teams array [{id,data}]
+let myRole = "viewer"; // leader1..leader4 / operator / viewer
+let tickTimer = null;
 
-// ====== HELPERS ======
+// ====== NORMALIZE ======
+const normGroup = (g) => String(g || "A").trim().toUpperCase();
+const normStatus= (s) => String(s || "available").trim().toLowerCase();
 
-// ★ 이미지 경로 처리: Firebase에
-//   photoUrl = "assets/players/player11.png"
-//   로 넣어두면 그대로 사용.
-//   "./assets/..."나 "/assets/..."는 앞부분 잘라줌.
-//   "player11.png"만 있으면 assets/players/ 를 붙여줌.
-function resolvePhotoUrl(u){
-  const fallback = "assets/players/player01.png";
-
-  if (!u) return fallback;
-
-  if (/^https?:\/\//i.test(u)) return u;
-
-  let path = u.toString().trim();
-
-  // 앞의 ./ 또는 / 제거
-  path = path.replace(/^\.?\//, "");
-
-  // assets/ 없이 파일명만 있으면 players 폴더 기준으로
-  if (!path.startsWith("assets/")) {
-    path = "assets/players/" + path;
-  }
-
-  return path;
+function isOperator(){
+  return myRole === "operator";
+}
+function myTeamId(){
+  if (myRole.startsWith("leader")) return myRole; // leader1..leader4
+  return null;
 }
 
-function normalizeGroup(g){
-  return (g ?? "").toString().trim().toUpperCase();
-}
+// ====== LISTENERS ======
+onSnapshot(roomRef, (snap) => {
+  roomState = snap.exists() ? snap.data() : null;
+  renderAll();
+  syncTick();
+});
 
-function formatLeaderName(id){
-  const map = {
-    leader1: "팀장 1",
-    leader2: "팀장 2",
-    leader3: "팀장 3",
-    leader4: "팀장 4",
-    operator: "운영자"
-  };
-  return map[id] || id || "-";
-}
+onSnapshot(query(teamsCol, orderBy("orderIndex")), (snap) => {
+  teams = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderTeams();
+});
 
-function byOrderIndex(a,b){
-  return (a.orderIndex ?? 9999) - (b.orderIndex ?? 9999);
-}
-const nowMs = ()=>Date.now();
-
-function startLocalTimer(endsAtMs){
-  clearInterval(timerInterval);
-  if (!timerEl) return;
-
-  if (!endsAtMs){
-    timerEl.textContent = "-";
-    return;
-  }
-
-  const tick = async ()=>{
-    const remain = Math.max(0, Math.floor((endsAtMs - nowMs())/1000));
-    timerEl.textContent = remain.toString();
-    if (remain <= 0){
-      clearInterval(timerInterval);
-      await tryFinalizeByTimeout();
-    }
-  };
-  tick();
-  timerInterval = setInterval(tick, 250);
-}
-
-function showOverlaySold(teamId, player, price){
-  if (!overlay) return;
-  const t = nowMs();
-  if (t - lastOverlayAt < 300) return;
-  lastOverlayAt = t;
-
-  if (overlayTeam) overlayTeam.textContent = `${formatLeaderName(teamId)} 낙찰!`;
-  if (overlayPhoto) overlayPhoto.src = resolvePhotoUrl(player.photoUrl);
-  if (overlayName) overlayName.textContent = player.name || player.id;
-  if (overlayPrice) overlayPrice.textContent = `${price}점`;
-
-  overlay.classList.add("show");
-  setTimeout(()=> overlay.classList.remove("show"), 1200);
-}
-
-// ====== ROLE UI ======
-if (roleSelect){
-  roleSelect.addEventListener("change", ()=>{
-    myRole = roleSelect.value;
-    localStorage.setItem("cw_role", myRole);
-    if (adminControls) adminControls.style.display = (myRole==="operator") ? "flex" : "none";
-    if (bidBtn) bidBtn.disabled = !(myRole.startsWith("leader"));
-  });
-}
-
-// ====== INIT DOCS ======
-async function ensureTeams(){
-  const snap = await getDocs(teamsCol);
-  if (!snap.empty) return;
-
-  const batch = writeBatch(db);
-  ["leader1","leader2","leader3","leader4"].forEach((id,i)=>{
-    batch.set(doc(teamsCol,id), {
-      name: `TEAM ${i+1}`,
-      points: TEAM_START_POINTS,
-      color: id,
-      createdAt: serverTimestamp()
-    }, {merge:true});
-  });
-  await batch.commit();
-}
-
-async function ensureRoom(){
-  const snap = await getDoc(roomRef);
-  if (snap.exists()) return;
-
-  await setDoc(roomRef,{
-    title: "팀원 경매",
-    status: "waiting",       // waiting | bidding | finished
-    currentGroup: "A",
-    currentPlayerId: null,
-    endsAtMs: null,
-    highestBid: 0,
-    highestLeaderId: null,
-    remainingAuction: false,
-    remainingQueue: [],
-    roundId: 0,
-    testMode: false,
-    finalizing: false,
-    lastSold: null,
-    updatedAt: serverTimestamp()
-  },{merge:true});
-}
-
-// ====== SNAPSHOTS ======
-function listenRoom(){
-  onSnapshot(roomRef,(snap)=>{
-    roomState = snap.data() || {};
-    renderRoom();
-    renderCurrent();
-    renderBidStats();
-    renderGroupRosters();
-    startLocalTimer(roomState.endsAtMs);
-
-    if (roomState.lastSold){
-      const k = JSON.stringify(roomState.lastSold);
-      if (k !== lastOverlayKey){
-        lastOverlayKey = k;
-        const {playerId, teamId, price} = roomState.lastSold;
-        const player = playersCache.find(p=>p.id===playerId);
-        if (player) showOverlaySold(teamId, player, price);
-      }
-    }
-  });
-}
-
-function listenPlayers(){
-  const qPlayers = query(playersCol, orderBy("orderIndex","asc"));
-  onSnapshot(qPlayers,(snap)=>{
-    playersCache = snap.docs.map(d=>({id:d.id,...d.data()}));
-    renderCurrent();
-    renderGroupRosters();
-    renderTeams();
-  });
-}
-
-function listenTeams(){
-  onSnapshot(teamsCol,(snap)=>{
-    teamsCache = {};
-    snap.docs.forEach(d=> teamsCache[d.id] = {id:d.id,...d.data()});
-    renderTeams();
-  });
-}
-
-function listenBids(){
-  const qBids = query(bidsCol, orderBy("createdAt","desc"), limit(80));
-  onSnapshot(qBids,(snap)=>{
-    const bids = snap.docs.map(d=>({id:d.id,...d.data()}));
-    renderBidLog(bids);
-  });
-}
+onSnapshot(query(playersCol, orderBy("orderIndex")), (snap) => {
+  players = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderGroups();
+  renderTeams();
+  renderCurrent();
+});
 
 // ====== RENDER ======
-function renderRoom(){
-  const st = roomState?.status || "waiting";
-  if (statusText) statusText.textContent =
-    st==="bidding" ? "경매중" : st==="finished" ? "종료" : "대기중";
-
-  if (statusDot){
-    statusDot.className = "dot " +
-      (st==="bidding" ? "bidding" : st==="finished" ? "finished" : "");
-  }
-
-  if (modeBadge){
-    modeBadge.textContent = `ROOM1 · ${roomState?.testMode ? "TEST" : "REAL"} · ${roomState?.currentGroup || "A"}`;
-  }
-
-  if (adminControls) adminControls.style.display = (myRole==="operator") ? "flex" : "none";
-  if (bidBtn) bidBtn.disabled = !(myRole.startsWith("leader"));
+function renderAll(){
+  renderCurrent();
+  renderGroups();
+  renderTeams();
+  renderLogsPreview();
+  renderStatus();
 }
 
-function findCurrentPlayer(){
-  const id = roomState?.currentPlayerId;
-  if (!id) return null;
-  return playersCache.find(p=>p.id===id) || null;
+function renderStatus(){
+  if(!roomState) return;
+  text("roomTitle", roomState.title || "ROOM1");
+  text("phaseLabel", roomState.currentGroup ? `GROUP ${roomState.currentGroup}` : "");
+  // 안내 문구(본경매 시작 등)
+  const ann = roomState.announcement;
+  const annBox = el("announcementBox") || el("announcement");
+  if (annBox){
+    if (ann){
+      annBox.textContent = ann;
+      annBox.style.display = "";
+      // 로컬에서만 3초 후 숨김(DB는 유지)
+      setTimeout(() => { annBox.style.display="none"; }, 3000);
+    } else {
+      annBox.style.display = "none";
+    }
+  }
 }
 
 function renderCurrent(){
-  const p = findCurrentPlayer();
-  if (!p){
-    if (currentPhoto) currentPhoto.src = resolvePhotoUrl(null);
-    if (currentName) currentName.textContent = "-";
-    if (currentRole) currentRole.textContent = "-";
-    if (currentGroupEl) currentGroupEl.textContent = "-";
-    if (currentBase) currentBase.textContent = "-";
-    if (currentBio) currentBio.textContent = "-";
-    if (currentStatusPill) currentStatusPill.textContent = "대기";
-    if (timerPlayerNameEl) timerPlayerNameEl.textContent = "-";
-    if (bidInput) bidInput.placeholder = "입찰 금액(5점 단위)";
+  if(!roomState){
+    text("currentName","-");
+    text("currentRole","-");
+    text("currentGroup","-");
+    text("currentBase","-");
+    const img=el("currentImg"); if(img) img.src="";
     return;
   }
-
-  if (currentPhoto) currentPhoto.src = resolvePhotoUrl(p.photoUrl);
-  if (currentName) currentName.textContent = p.name || p.id;
-  if (currentRole) currentRole.textContent = p.role || "-";
-  if (currentGroupEl) currentGroupEl.textContent = normalizeGroup(p.group) || "-";
-  if (currentBase) currentBase.textContent = p.basePrice ?? 0;
-  if (currentBio) currentBio.textContent = p.bio || "";
-  if (currentStatusPill) currentStatusPill.textContent =
-    roomState?.status==="bidding" ? "입찰중" : "대기";
-  if (timerPlayerNameEl) timerPlayerNameEl.textContent = p.name || p.id;
-
-  const g = normalizeGroup(p.group);
-  const minByGroup = MIN_BID_BY_GROUP[g] ?? 0;
-  const minAllowed = Math.max(minByGroup, p.basePrice ?? 0);
-
-  if (bidInput){
-    bidInput.placeholder = `입찰 금액(5점 단위) · ${g} 최소 ${minAllowed}점`;
-  }
-}
-
-function renderBidStats(){
-  if (highestAmountEl) highestAmountEl.textContent = roomState?.highestBid ?? "-";
-  if (highestLeaderEl) highestLeaderEl.textContent = formatLeaderName(roomState?.highestLeaderId);
-}
-
-function renderBidLog(allBids){
-  if (!bidLogEl || !roomState) return;
-  bidLogEl.innerHTML = "";
-
   const curId = roomState.currentPlayerId;
-  const roundId = roomState.roundId ?? 0;
+  const cur = players.find(p => p.id === curId);
 
-  const bids = allBids
-    .filter(b=>b.playerId===curId && (b.roundId ?? 0)===roundId)
-    .sort((a,b)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0));
+  text("currentName", cur?.name || "-");
+  text("currentRole", cur?.role || "-");
+  text("currentGroup", normGroup(cur?.group) || "-");
+  text("currentBase", cur?.basePrice ?? 0);
 
-  if (bids.length===0){
-    bidLogEl.innerHTML = `<div class="item" style="color:#8fa0c8;">입찰 로그 없음</div>`;
-    return;
+  const img = el("currentImg");
+  if(img){
+    const u = cur?.photoUrl || "";
+    img.src = u;
+    img.alt = cur?.name || "current player";
   }
 
-  bids.forEach(b=>{
-    const div = document.createElement("div");
-    div.className = "item";
-    div.textContent = `${formatLeaderName(b.leaderId)} · ${b.amount}점`;
-    bidLogEl.appendChild(div);
+  text("highestBid", roomState.highestBid ?? 0);
+  text("highestBidder", roomState.highestBidderName || "-");
+
+  // TIME COUNT에 현재 선수 이름 같이 표시
+  const tcName = el("timeCountName");
+  if(tcName) tcName.textContent = cur?.name || "-";
+}
+
+function renderGroups(){
+  const aBox = getGroupContainer("A");
+  const bBox = getGroupContainer("B");
+  if(aBox) aBox.innerHTML = "";
+  if(bBox) bBox.innerHTML = "";
+
+  const avail = players.filter(p => normStatus(p.status)==="available");
+
+  const groupA = avail.filter(p => normGroup(p.group)==="A");
+  const groupB = avail.filter(p => normGroup(p.group)==="B"); // ✅ 공백/소문자도 다 잡힘
+
+  if(aBox) groupA.forEach(p => aBox.appendChild(playerCard(p)));
+  if(bBox) groupB.forEach(p => bBox.appendChild(playerCard(p)));
+
+  // 혹시 그룹 값이 이상하면 콘솔에 경고 남김
+  const weird = avail.filter(p => !["A","B"].includes(normGroup(p.group)));
+  if (weird.length){
+    console.warn("Unknown group players:", weird.map(w=>({id:w.id, group:w.group, name:w.name})));
+  }
+}
+
+function playerCard(p){
+  const card = document.createElement("div");
+  card.className = "player-card";
+  card.dataset.pid = p.id;
+
+  const img = document.createElement("img");
+  img.className = "player-img";
+  img.src = p.photoUrl || "";
+  img.alt = p.name;
+
+  const name = document.createElement("div");
+  name.className = "player-name";
+  name.textContent = p.name || p.id;
+
+  card.appendChild(img);
+  card.appendChild(name);
+
+  // 클릭 시 운영자가 현재경매로 올릴 수 있게(선택 기능)
+  card.addEventListener("click", () => {
+    if(!isOperator()) return;
+    pickPlayerAsCurrent(p.id);
   });
 
-  bidLogEl.scrollTop = bidLogEl.scrollHeight;
+  return card;
 }
 
 function renderTeams(){
-  const soldPlayers = playersCache.filter(p=>p.status==="sold" && p.assignedTeamId);
-  ["leader1","leader2","leader3","leader4"].forEach((leaderId,idx)=>{
-    const el = teamEls[leaderId];
-    if (!el) return;
+  // sold players by assignedTeamId
+  const sold = players.filter(p => normStatus(p.status)==="sold" && p.assignedTeamId);
+  const soldByTeam = {};
+  sold.forEach(p => {
+    if(!soldByTeam[p.assignedTeamId]) soldByTeam[p.assignedTeamId] = [];
+    soldByTeam[p.assignedTeamId].push(p);
+  });
 
-    const t = teamsCache[leaderId] || {name:`TEAM ${idx+1}`, points:TEAM_START_POINTS};
+  // teams might not be ordered if no orderIndex
+  const orderedTeams = teams.length ? teams : [
+    {id:"leader1", name:"TEAM 1"},
+    {id:"leader2", name:"TEAM 2"},
+    {id:"leader3", name:"TEAM 3"},
+    {id:"leader4", name:"TEAM 4"},
+  ];
 
-    const list = soldPlayers
-      .filter(p=>p.assignedTeamId===leaderId)
-      .sort((a,b)=>(a.soldAtMs??0)-(b.soldAtMs??0));
+  orderedTeams.forEach((t, idx) => {
+    const i = idx + 1;
+    const box = getTeamContainer(i);
+    if(!box) return;
+    box.innerHTML = "";
 
-    el.style.setProperty("--team-color",
-      leaderId==="leader1" ? "#7aa2ff" :
-      leaderId==="leader2" ? "#ff7ad6" :
-      leaderId==="leader3" ? "#62e7a7" :
-      "#ffcc66"
-    );
+    const roster = (soldByTeam[t.id] || []).sort((a,b)=>(a.orderIndex??999)-(b.orderIndex??999));
+    for(let s=0; s<5; s++){
+      const slot = document.createElement("div");
+      slot.className = "roster-slot";
+      if(roster[s]){
+        slot.classList.add("filled");
+        slot.innerHTML = `
+          <img class="roster-img" src="${roster[s].photoUrl||""}" alt="${roster[s].name}">
+          <div class="roster-name">${roster[s].name}</div>
+          <div class="roster-price">${roster[s].finalPrice ?? 0}점</div>
+        `;
+      }else{
+        slot.textContent = "EMPTY";
+      }
+      box.appendChild(slot);
+    }
 
-    el.innerHTML = `
-      <div class="team-header">
-        <div class="team-name">${t.name || `TEAM ${idx+1}`}</div>
-        <div class="team-points">${t.points ?? TEAM_START_POINTS} / ${TEAM_START_POINTS}</div>
-      </div>
-      <div class="team-row">
-        ${Array.from({length:5}).map((_,i)=>{
-          const p = list[i];
-          if (!p){
-            return `<div class="slot empty"><div class="slot-name">EMPTY</div></div>`;
-          }
-          return `
-            <div class="slot">
-              <img src="${resolvePhotoUrl(p.photoUrl)}" alt="${p.name}">
-              <div class="slot-text">
-                <div class="slot-name">${p.name}</div>
-                <div class="slot-price">${p.finalPrice ?? 0}점</div>
-              </div>
-            </div>
-          `;
-        }).join("")}
-      </div>
-    `;
+    const pEl = getTeamPointsEl(i);
+    if(pEl){
+      const remain = t.pointsRemaining ?? t.points ?? TEAM_START_POINTS;
+      pEl.textContent = `${remain} / ${TEAM_START_POINTS}`;
+    }
   });
 }
 
-function renderAvatar(p, curId){
-  const cls = [
-    "avatar",
-    p.id===curId ? "current" : "",
-    p.status==="sold" ? "sold" : ""
-  ].filter(Boolean).join(" ");
-
-  return `
-    <div class="${cls}">
-      <img src="${resolvePhotoUrl(p.photoUrl)}" alt="${p.name}">
-      <div class="name-tip">${p.name || p.id}</div>
-    </div>
-  `;
+function renderLogsPreview(){
+  const logBox = el("logBox") || el("bidLog");
+  if(!logBox) return;
+  // 실시간 로그는 아래 listener에서 따로 렌더
 }
 
-function renderGroupRosters(){
-  if (!rosterAEl || !rosterBEl) return;
-  const cur = roomState?.currentPlayerId;
+let logUnsub = null;
+function attachLogListener(){
+  if(logUnsub) logUnsub();
+  logUnsub = onSnapshot(query(logsCol, orderBy("createdAt","asc")), (snap)=>{
+    const logBox = el("logBox") || el("bidLog");
+    if(!logBox) return;
+    logBox.innerHTML = "";
+    snap.docs.forEach(d=>{
+      const x = d.data();
+      const row = document.createElement("div");
+      row.className="log-row";
+      row.textContent = `${x.teamName||x.teamId} - ${x.playerName} : ${x.amount}점`;
+      logBox.appendChild(row);
+    });
+  });
+}
+attachLogListener();
 
-  const aList = playersCache
-    .filter(p=>normalizeGroup(p.group)==="A" && p.status!=="sold")
-    .sort(byOrderIndex);
+// ====== TICK / TIMER ======
+function syncTick(){
+  if(tickTimer) clearInterval(tickTimer);
+  tickTimer = setInterval(()=>{
+    if(!roomState?.endsAtMs){
+      text("timeLeft","-");
+      return;
+    }
+    const leftMs = roomState.endsAtMs - Date.now();
+    const leftSec = Math.max(0, Math.ceil(leftMs/1000));
+    text("timeLeft", leftSec);
 
-  const bList = playersCache
-    .filter(p=>normalizeGroup(p.group)==="B" && p.status!=="sold")
-    .sort(byOrderIndex);
+    // 0초 되면 운영자가 유찰/낙찰 처리 후 다음 선수
+    if(leftSec<=0 && isOperator()){
+      autoFinalizeByTimeout();
+    }
+  }, 250);
+}
 
-  rosterAEl.innerHTML = aList.map(p=>renderAvatar(p,cur)).join("");
-  rosterBEl.innerHTML = bList.map(p=>renderAvatar(p,cur)).join("");
+async function autoFinalizeByTimeout(){
+  if(roomState?.finalizing) return;
+  try{
+    await finalizeCurrentAuction("timeout");
+  }catch(e){
+    console.error("autoFinalizeByTimeout error:", e);
+  }
 }
 
 // ====== AUCTION FLOW ======
-function pickFirstAvailableInGroup(group){
-  const g = normalizeGroup(group);
-  const list = playersCache
-    .filter(p=>normalizeGroup(p.group)===g && p.status==="available")
-    .sort(byOrderIndex);
-  return list[0] || null;
+function getNextPlayerId(group){
+  const g = normGroup(group);
+  const avail = players
+    .filter(p => normStatus(p.status)==="available" && normGroup(p.group)===g)
+    .sort((a,b)=>(a.orderIndex??999)-(b.orderIndex??999));
+  return avail[0]?.id || null;
 }
 
-function getNextPlayer(currentGroup, currentId){
-  const g = normalizeGroup(currentGroup);
-
-  const same = playersCache
-    .filter(p=>normalizeGroup(p.group)===g && p.status==="available" && p.id!==currentId)
-    .sort(byOrderIndex);
-  if (same.length>0) return {player:same[0], group:g};
-
-  if (g==="A"){
-    const b = playersCache
-      .filter(p=>normalizeGroup(p.group)==="B" && p.status==="available")
-      .sort(byOrderIndex);
-    if (b.length>0) return {player:b[0], group:"B"};
-  }
-  return {player:null, group:g};
+async function pickPlayerAsCurrent(pid){
+  if(!isOperator()) return;
+  await updateDoc(roomRef,{
+    currentPlayerId: pid,
+    highestBid: 0,
+    highestBidderId: null,
+    highestBidderName: null,
+    endsAtMs: Date.now() + AUCTION_SECONDS*1000,
+    status: "running",
+    phase: normGroup(players.find(p=>p.id===pid)?.group || "A"),
+    announcement: null,
+    finalizing: false,
+  });
 }
 
-async function startAuction(isTest){
-  const firstA = pickFirstAvailableInGroup("A");
-  if (!firstA){
-    alert("A그룹에 남은 선수가 없습니다.");
+async function startMainAuction(){
+  if(!isOperator()) return;
+  const firstA = getNextPlayerId("A");
+  if(!firstA){
+    alert("GROUP A에 남은 선수가 없습니다.");
     return;
   }
-  const endsAtMs = nowMs()+AUCTION_SECONDS*1000;
-
   await updateDoc(roomRef,{
-    status:"bidding",
-    testMode: !!isTest,
+    status:"running",
     currentGroup:"A",
-    currentPlayerId:firstA.id,
-    endsAtMs,
+    phase:"A",
+    currentPlayerId:firstA,
     highestBid:0,
-    highestLeaderId:null,
-    remainingAuction:false,
+    highestBidderId:null,
+    highestBidderName:null,
+    endsAtMs: Date.now() + AUCTION_SECONDS*1000,
+    announcement: "본경매 시작!",
     finalizing:false,
-    lastSold:null,
-    updatedAt: serverTimestamp()
-  });
-
-  if (myRole==="operator"){
-    alert(isTest ? "테스트 경매 시작!" : "본경매 시작!");
-  }
-}
-
-async function startRemainingAuction(){
-  const remains = playersCache.filter(p=>p.status==="unsold").sort(byOrderIndex);
-  if (remains.length===0){
-    alert("유찰된 선수가 없습니다.");
-    return;
-  }
-  const next = remains[0];
-  await updateDoc(roomRef,{
-    status:"bidding",
-    remainingAuction:true,
-    currentPlayerId:next.id,
-    currentGroup: normalizeGroup(next.group) || "A",
-    endsAtMs: nowMs()+AUCTION_SECONDS*1000,
-    highestBid:0,
-    highestLeaderId:null,
-    finalizing:false,
-    lastSold:null,
-    updatedAt: serverTimestamp()
   });
 }
 
-async function resetAll(){
-  if (myRole!=="operator"){
-    alert("운영자만 리셋할 수 있어요.");
+async function finalizeCurrentAuction(reason="sold"){
+  await runTransaction(db, async (tx)=>{
+    const roomSnap = await tx.get(roomRef);
+    if(!roomSnap.exists()) throw new Error("room missing");
+    const r = roomSnap.data();
+    if(r.finalizing) return;
+    const curId = r.currentPlayerId;
+    if(!curId){
+      tx.update(roomRef,{finalizing:false});
+      return;
+    }
+
+    const curRef = doc(playersCol, curId);
+    const curSnap = await tx.get(curRef);
+    if(!curSnap.exists()){
+      tx.update(roomRef,{currentPlayerId:null, finalizing:false});
+      return;
+    }
+    const cur = curSnap.data();
+    const curGroup = normGroup(cur.group);
+
+    const highestBid = r.highestBid ?? 0;
+    const bidderId = r.highestBidderId || null;
+
+    // ✅ 먼저 finalizing 락
+    tx.update(roomRef,{finalizing:true});
+
+    if(highestBid>0 && bidderId){
+      // sold
+      tx.update(curRef,{
+        status:"sold",
+        assignedTeamId: bidderId,
+        finalPrice: highestBid,
+        updatedAt: serverTimestamp(),
+      });
+
+      const teamRef = doc(teamsCol, bidderId);
+      const teamSnap = await tx.get(teamRef);
+      if(teamSnap.exists()){
+        const t = teamSnap.data();
+        const remain = (t.pointsRemaining ?? t.points ?? TEAM_START_POINTS) - highestBid;
+        tx.update(teamRef,{ pointsRemaining: remain });
+      }
+    }else{
+      // unsold (유찰)
+      tx.update(curRef,{
+        status:"unsold",
+        assignedTeamId:null,
+        finalPrice:0,
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    // 다음 선수 선택
+    let nextGroup = curGroup;
+    let nextId = getNextPlayerId(nextGroup);
+
+    if(!nextId && curGroup==="A"){
+      nextGroup="B";
+      nextId=getNextPlayerId("B");
+    }
+
+    if(!nextId){
+      // 끝
+      tx.update(roomRef,{
+        status:"finished",
+        currentPlayerId:null,
+        currentGroup: nextGroup,
+        highestBid:0,
+        highestBidderId:null,
+        highestBidderName:null,
+        endsAtMs:null,
+        finalizing:false,
+        announcement: r.announcement || "경매 종료",
+      });
+      return;
+    }
+
+    tx.update(roomRef,{
+      status:"running",
+      currentGroup: nextGroup,
+      phase: nextGroup,
+      currentPlayerId: nextId,
+      highestBid:0,
+      highestBidderId:null,
+      highestBidderName:null,
+      endsAtMs: Date.now() + AUCTION_SECONDS*1000,
+      finalizing:false,
+      announcement: reason==="timeout" ? "유찰 → 다음 선수" : "낙찰 완료!",
+    });
+  });
+}
+
+// ====== BID ======
+async function placeBid(){
+  const bidInput = el("bidInput");
+  if(!bidInput) return;
+
+  const amount = Number(bidInput.value);
+  if(!amount || amount<=0){
+    alert("입찰 금액을 입력해줘.");
+    return;
+  }
+  if(amount % BID_STEP !== 0){
+    alert(`입찰은 ${BID_STEP}점 단위만 가능해.`);
     return;
   }
 
-  const roundId = (roomState?.roundId ?? 0) + 1;
+  const teamId = myTeamId();
+  if(!teamId){
+    alert("팀장만 입찰할 수 있어.");
+    return;
+  }
 
-  const batch = writeBatch(db);
-  ["leader1","leader2","leader3","leader4"].forEach((id,i)=>{
-    batch.set(doc(teamsCol,id), {
-      name:`TEAM ${i+1}`,
-      points: TEAM_START_POINTS
-    },{merge:true});
-  });
+  await runTransaction(db, async (tx)=>{
+    const roomSnap = await tx.get(roomRef);
+    if(!roomSnap.exists()) throw new Error("room missing");
+    const r = roomSnap.data();
+    const curId = r.currentPlayerId;
+    if(!curId) throw new Error("no current player");
 
-  playersCache.forEach(p=>{
-    batch.update(doc(playersCol,p.id),{
-      status:"available",
-      assignedTeamId:null,
-      finalPrice:null,
-      soldBy:null,
-      soldAtMs:null
+    const curRef = doc(playersCol, curId);
+    const curSnap = await tx.get(curRef);
+    if(!curSnap.exists()) throw new Error("player missing");
+    const cur = curSnap.data();
+    const g = normGroup(cur.group);
+
+    const minBid = MIN_BID_BY_GROUP[g] ?? 0;
+    if(amount < minBid){
+      throw new Error(`GROUP ${g}는 최소 ${minBid}점부터 입찰 가능`);
+    }
+
+    const highest = r.highestBid ?? 0;
+    if(amount < highest + BID_STEP){
+      throw new Error(`현재 최고가(${highest})보다 최소 ${BID_STEP}점 이상 높아야 함`);
+    }
+
+    const teamRef = doc(teamsCol, teamId);
+    const teamSnap = await tx.get(teamRef);
+    if(!teamSnap.exists()) throw new Error("team missing");
+    const t = teamSnap.data();
+    const remain = t.pointsRemaining ?? t.points ?? TEAM_START_POINTS;
+    if(amount > remain){
+      throw new Error("팀 잔여 포인트가 부족해.");
+    }
+
+    // 최고가 갱신
+    tx.update(roomRef,{
+      highestBid: amount,
+      highestBidderId: teamId,
+      highestBidderName: t.name || teamId,
+      lastBidAtMs: Date.now(),
+    });
+
+    // 로그 기록(트랜잭션 안에서 doc()로 자동ID 생성)
+    const logRef = doc(logsCol);
+    tx.set(logRef,{
+      createdAt: serverTimestamp(),
+      teamId,
+      teamName: t.name || teamId,
+      playerId: curId,
+      playerName: cur.name || curId,
+      amount,
+      group: g,
     });
   });
 
-  batch.set(roomRef,{
+  bidInput.value = "";
+}
+
+// ====== RESET ======
+async function resetAll(){
+  if(!isOperator()) return;
+
+  const batch = writeBatch(db);
+
+  // room reset
+  batch.update(roomRef,{
     status:"waiting",
-    testMode:false,
     currentGroup:"A",
+    phase:"A",
     currentPlayerId:null,
-    endsAtMs:null,
     highestBid:0,
-    highestLeaderId:null,
-    remainingAuction:false,
-    remainingQueue:[],
-    roundId,
+    highestBidderId:null,
+    highestBidderName:null,
+    endsAtMs:null,
+    announcement:"전체 리셋 완료",
     finalizing:false,
-    lastSold:null,
-    updatedAt: serverTimestamp()
-  },{merge:true});
+  });
+
+  // players reset
+  const pSnap = await getDocs(playersCol);
+  pSnap.forEach(d=>{
+    batch.update(d.ref,{
+      status:"available",
+      assignedTeamId:null,
+      finalPrice:0,
+      updatedAt: serverTimestamp(),
+    });
+  });
+
+  // teams reset
+  const tSnap = await getDocs(teamsCol);
+  tSnap.forEach(d=>{
+    batch.update(d.ref,{
+      pointsRemaining: TEAM_START_POINTS,
+    });
+  });
 
   await batch.commit();
 
-  // bids 삭제
-  try{
-    const bidsSnap = await getDocs(bidsCol);
-    const delBatch = writeBatch(db);
-    bidsSnap.docs.forEach(d=>delBatch.delete(d.ref));
-    await delBatch.commit();
-  }catch(e){
-    console.warn("bids clear failed:", e);
-  }
-
-  alert("전체 리셋 완료");
+  // logs delete (별도 배치)
+  const lSnap = await getDocs(logsCol);
+  const delBatch = writeBatch(db);
+  lSnap.forEach(d=> delBatch.delete(d.ref));
+  await delBatch.commit();
 }
 
-// ====== FINALIZE ======
-async function tryFinalizeByTimeout(){
-  if (!roomState || roomState.status!=="bidding" || !roomState.currentPlayerId) return;
-
-  const cachedPlayers = playersCache.slice();
-  const currentGroupLocal = normalizeGroup(roomState.currentGroup || "A");
-
-  try{
-    await runTransaction(db, async(tx)=>{
-      // READS
-      const roomSnap = await tx.get(roomRef);
-      const room = roomSnap.data();
-      if (!room || room.status!=="bidding") return;
-      if (room.finalizing) return;
-
-      const curId = room.currentPlayerId;
-      if (!curId) return;
-
-      const playerRef = doc(playersCol,curId);
-      const playerSnap = await tx.get(playerRef);
-      const player = playerSnap.data();
-      if (!player) return;
-
-      const highestBid = room.highestBid ?? 0;
-      const winnerId  = room.highestLeaderId || null;
-
-      let teamRef=null, team=null;
-      if (highestBid>0 && winnerId){
-        teamRef = doc(teamsCol,winnerId);
-        const teamSnap = await tx.get(teamRef);
-        team = teamSnap.data() || {points:TEAM_START_POINTS};
-      }
-
-      // 다음 선수(캐시)
-      let nextPlayer=null;
-      let nextGroup=currentGroupLocal;
-
-      const same = cachedPlayers
-        .filter(p=>normalizeGroup(p.group)===currentGroupLocal && p.status==="available" && p.id!==curId)
-        .sort(byOrderIndex);
-
-      if (same.length>0){
-        nextPlayer = same[0];
-      }else if (currentGroupLocal==="A"){
-        const b = cachedPlayers
-          .filter(p=>normalizeGroup(p.group)==="B" && p.status==="available")
-          .sort(byOrderIndex);
-        if (b.length>0){
-          nextPlayer=b[0];
-          nextGroup="B";
-        }
-      }
-
-      const endsAtMs = nextPlayer ? nowMs()+AUCTION_SECONDS*1000 : null;
-      const newStatus = nextPlayer ? "bidding" : "finished";
-
-      // WRITES
-      const roomPatch = {
-        status:newStatus,
-        currentGroup:nextGroup,
-        currentPlayerId: nextPlayer ? nextPlayer.id : null,
-        endsAtMs,
-        highestBid:0,
-        highestLeaderId:null,
-        finalizing:false,
-        updatedAt: serverTimestamp()
-      };
-
-      if (highestBid>0 && winnerId && team && (team.points ?? TEAM_START_POINTS) >= highestBid){
-        // 낙찰
-        tx.update(playerRef,{
-          status:"sold",
-          assignedTeamId:winnerId,
-          finalPrice:highestBid,
-          soldBy:winnerId,
-          soldAtMs:nowMs(),
-          updatedAt: serverTimestamp()
-        });
-        tx.update(teamRef,{points: increment(-highestBid)});
-        roomPatch.lastSold = {playerId:curId, teamId:winnerId, price:highestBid};
-      }else{
-        // 유찰
-        tx.update(playerRef,{
-          status:"unsold",
-          finalPrice:null,
-          updatedAt: serverTimestamp()
-        });
-        roomPatch.lastSold = null;
-      }
-
-      tx.update(roomRef,roomPatch);
-    });
-  }catch(e){
-    console.error("finalize error",e);
-  }
-}
-
-// ====== BIDDING ======
-async function placeBid(){
-  if (!roomState || roomState.status!=="bidding"){
-    alert("경매 중이 아닙니다.");
-    return;
-  }
-  const p = findCurrentPlayer();
-  if (!p){
-    alert("현재 선수 없음");
-    return;
-  }
-  if (!myRole.startsWith("leader")){
-    alert("팀장만 입찰할 수 있어요.");
-    return;
-  }
-
-  let amt = Number(bidInput?.value || 0);
-  if (!Number.isFinite(amt)) return;
-
-  if (amt % BID_STEP !== 0){
-    alert(`입찰은 ${BID_STEP}점 단위로만 가능합니다.`);
-    return;
-  }
-
-  const g = normalizeGroup(p.group);
-  const minByGroup = MIN_BID_BY_GROUP[g] ?? 0;
-  const minAllowed = Math.max(minByGroup, p.basePrice ?? 0);
-
-  if (amt < minAllowed){
-    alert(`${g}그룹은 최소 ${minAllowed}점 이상부터 입찰 가능합니다.`);
-    return;
-  }
-
-  const highest = roomState.highestBid ?? 0;
-  if (amt <= highest){
-    alert(`현재 최고가(${highest}점)보다 높게 입찰해야 합니다.`);
-    return;
-  }
-  if ((amt - highest) < BID_STEP && highest>0){
-    alert(`최소 ${BID_STEP}점 이상 올려야 합니다.`);
-    return;
-  }
-
-  try{
-    await runTransaction(db, async(tx)=>{
-      const roomSnap = await tx.get(roomRef);
-      const room = roomSnap.data();
-      if (!room || room.status!=="bidding") throw new Error("not bidding");
-      if (room.currentPlayerId !== p.id) throw new Error("player changed");
-
-      const teamRef = doc(teamsCol,myRole);
-      const teamSnap = await tx.get(teamRef);
-      const team = teamSnap.data() || {points:TEAM_START_POINTS};
-      const pts = team.points ?? TEAM_START_POINTS;
-
-      if (pts < amt) throw new Error("points 부족");
-
-      const minAllowed2 = Math.max(MIN_BID_BY_GROUP[g] ?? 0, p.basePrice ?? 0);
-      if (amt < minAllowed2) throw new Error("하한가 미만");
-
-      tx.update(roomRef,{
-        highestBid:amt,
-        highestLeaderId:myRole,
-        updatedAt: serverTimestamp()
-      });
-
-      const bidRef = doc(bidsCol);
-      tx.set(bidRef,{
-        roundId:room.roundId ?? 0,
-        playerId:p.id,
-        leaderId:myRole,
-        amount:amt,
-        createdAt: serverTimestamp()
-      });
-    });
-
-    if (bidInput) bidInput.value = "";
-  }catch(e){
-    const msg = e.message || "";
-    if (msg.includes("points")) alert("팀 포인트가 부족합니다.");
-    else if (msg.includes("하한가")) alert("그룹 최소 입찰가 미만입니다.");
-    else alert("입찰 실패(동시 갱신). 다시 시도!");
-  }
-}
-
-if (bidBtn) bidBtn.addEventListener("click",placeBid);
-if (bidInput){
-  bidInput.addEventListener("keydown",(e)=>{
-    if (e.key==="Enter") placeBid();
+async function resetPointsOnly(){
+  if(!isOperator()) return;
+  const tSnap = await getDocs(teamsCol);
+  const batch = writeBatch(db);
+  tSnap.forEach(d=>{
+    batch.update(d.ref,{ pointsRemaining: TEAM_START_POINTS });
   });
+  batch.update(roomRef,{ announcement:"포인트 리셋 완료" });
+  await batch.commit();
 }
 
-// ====== ADMIN BUTTONS ======
-if (btnStartTest)   btnStartTest.addEventListener("click",()=>startAuction(true));
-if (btnStartReal)   btnStartReal.addEventListener("click",()=>startAuction(false));
-if (btnStartRemain) btnStartRemain.addEventListener("click",startRemainingAuction);
-if (btnReset)       btnReset.addEventListener("click",resetAll);
+// ====== EVENTS ======
+function bindEvents(){
+  const roleSel = el("roleSelect");
+  if(roleSel){
+    roleSel.addEventListener("change", ()=>{
+      myRole = roleSel.value;
+    });
+    myRole = roleSel.value;
+  }
 
-// ====== BOOT ======
-(async function boot(){
-  await ensureTeams();
-  await ensureRoom();
-  listenRoom();
-  listenPlayers();
-  listenTeams();
-  listenBids();
-})();
+  const bidBtn = el("bidBtn");
+  if(bidBtn) bidBtn.addEventListener("click", placeBid);
+
+  const bidInput = el("bidInput");
+  if(bidInput){
+    bidInput.addEventListener("keydown",(e)=>{
+      if(e.key==="Enter") placeBid();
+    });
+  }
+
+  const btnMain = el("btnMainStart");
+  if(btnMain) btnMain.addEventListener("click", startMainAuction);
+
+  const btnFinalize = el("btnFinalize");
+  if(btnFinalize) btnFinalize.addEventListener("click", ()=>finalizeCurrentAuction("sold"));
+
+  const btnResetAll = el("btnResetAll");
+  if(btnResetAll) btnResetAll.addEventListener("click", resetAll);
+
+  const btnResetPts = el("btnResetPoints");
+  if(btnResetPts) btnResetPts.addEventListener("click", resetPointsOnly);
+}
+bindEvents();
