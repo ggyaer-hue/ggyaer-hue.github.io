@@ -1,360 +1,267 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CWG Auction Room1</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ROOM1 Auction</title>
+
   <style>
     :root{
-      --bg:#0b0f1a;
-      --panel:#12172a;
-      --panel2:#0f1426;
-      --line:#232a45;
-      --text:#e7ebff;
-      --muted:#9aa4c7;
-      --accent:#7aa2ff;
-      --good:#62e7a7;
-      --warn:#ffcc66;
-      --bad:#ff8a8a;
+      --bg:#0b0e14; --panel:#141824; --panel2:#101321;
+      --line:#23283a; --text:#e6e8ef; --muted:#9aa3b2; --accent:#7aa2ff;
+      --good:#35d49a; --warn:#ffb020;
     }
-    *{box-sizing:border-box;}
+    *{box-sizing:border-box}
     body{
       margin:0; background:var(--bg); color:var(--text);
-      font-family:system-ui, -apple-system, Segoe UI, Roboto, "Pretendard", sans-serif;
+      font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     }
-
-    .page{
-      height:100vh; display:grid;
-      grid-template-columns: 1.35fr 1.1fr 0.95fr;
-      gap:12px; padding:12px;
+    header{
+      display:flex; align-items:center; gap:12px;
+      padding:12px 16px; border-bottom:1px solid var(--line);
+      background:linear-gradient(180deg,#0f1220,#0b0e14);
+      position:sticky; top:0; z-index:5;
     }
+    header h1{margin:0; font-size:18px; letter-spacing:.5px;}
+    header .phase{color:var(--muted); font-size:14px;}
 
-    /* ===== Panels ===== */
+    .wrap{display:grid; grid-template-columns: 1.2fr .8fr; gap:12px; padding:12px;}
+    .left, .right{display:flex; flex-direction:column; gap:12px;}
+
     .panel{
       background:var(--panel); border:1px solid var(--line);
-      border-radius:14px; padding:12px; overflow:hidden;
-      display:flex; flex-direction:column; min-height:0;
+      border-radius:14px; padding:12px;
+      box-shadow:0 10px 30px rgba(0,0,0,.25);
     }
-    .panel-header{
+    .panel-title{font-size:14px; color:var(--muted); margin-bottom:8px;}
+
+    /* current */
+    .current{
+      display:grid; grid-template-columns: 220px 1fr; gap:12px;
+    }
+    .current-img{
+      width:220px; height:220px; background:var(--panel2);
+      border-radius:12px; overflow:hidden; border:1px solid var(--line);
+      display:flex; align-items:center; justify-content:center;
+    }
+    .current-img img{width:100%; height:100%; object-fit:cover;}
+    .current-meta{
+      display:grid; grid-template-columns:1fr 1fr; gap:8px;
+      font-size:15px;
+    }
+    .kv{background:var(--panel2); border:1px solid var(--line); padding:8px; border-radius:10px;}
+    .kv .k{font-size:12px; color:var(--muted);}
+    .kv .v{font-size:18px; font-weight:700; margin-top:2px;}
+
+    .timer-box{
       display:flex; align-items:center; justify-content:space-between;
-      padding:6px 4px 10px 4px; border-bottom:1px solid var(--line);
-      margin-bottom:8px;
+      background:var(--panel2); border:1px dashed var(--line);
+      padding:8px 10px; border-radius:10px; margin-top:8px;
     }
-    .title{
-      font-size:18px; font-weight:800; letter-spacing:.2px;
-      display:flex; align-items:center; gap:8px;
-    }
-    .dot{width:10px;height:10px;border-radius:50%;background:#555;}
-    .dot.bidding{background:var(--warn); box-shadow:0 0 8px var(--warn);}
-    .dot.finished{background:var(--bad); box-shadow:0 0 8px var(--bad);}
+    .timer{font-size:28px; font-weight:800; color:var(--warn);}
+    .highest{display:flex; gap:8px; margin-top:8px;}
 
-    .badge{
-      font-size:12px; color:#cdd5f5; background:#1a2140;
-      padding:4px 8px; border-radius:999px; border:1px solid var(--line);
-      font-weight:700;
-    }
-
-    /* ===== Left: Teams ===== */
-    .teams-wrap{
-      gap:10px; display:flex; flex-direction:column; min-height:0;
-      overflow:auto; padding-bottom:6px;
-    }
-    .team-card{
-      background:var(--panel2); border:2px solid var(--line);
-      border-radius:14px; padding:10px; position:relative;
-      box-shadow: inset 0 0 0 2px rgba(255,255,255,0.02);
-    }
-    .team-card::before{
-      content:""; position:absolute; inset:0; border-radius:12px;
-      border:2px solid var(--team-color, var(--accent));
-      pointer-events:none; opacity:.6;
-    }
-    .team-header{
-      display:flex; align-items:center; justify-content:space-between;
-      margin-bottom:8px; font-weight:800;
-    }
-    .team-name{font-size:15px;}
-    .team-points{font-size:13px; color:var(--muted);}
-
-    .team-row{
-      display:grid; grid-template-columns: repeat(5,1fr); gap:6px;
-    }
-    .slot{
-      background:#0c1122; border:1px dashed #2a3258;
-      border-radius:10px; padding:6px;
-      min-height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center;
-      position:relative; gap:6px;
-    }
-    .slot img{
-      width:58px; height:58px; object-fit:cover; border-radius:8px;
-      border:1px solid #2a3258; background:#000;
-    }
-    .slot-text{ text-align:center; line-height:1.15; }
-    .slot-name{ font-size:13px; font-weight:800; }
-    .slot-price{ font-size:11px; color:var(--muted); font-weight:700; margin-top:2px;}
-    .slot-label{ display:none; }
-    .slot.empty{ opacity:.45; }
-
-    /* ✅ TEAM ROSTER 아래 로고 영역 */
-    .left-logo-area{
-      margin-top:8px;
-      display:flex; justify-content:center; align-items:center;
-      background:transparent; border:none; padding:6px 0 0 0;
-      flex-shrink:0;
-    }
-    .left-logo-area img{
-      max-width:88%;
-      max-height:140px;
-      object-fit:contain;
-      filter: drop-shadow(0 8px 22px rgba(0,0,0,.55));
-      opacity:.95;
-    }
-
-    /* ===== Middle: Current Auction ===== */
-    .current-wrap{display:flex; flex-direction:column; gap:10px; min-height:0;}
-    .current-card{
-      background:var(--panel2); border:1px solid var(--line);
-      border-radius:14px; padding:12px; display:grid;
-      grid-template-columns: 1.1fr 1fr; gap:12px; align-items:center;
-    }
-    .current-photo{
-      width:100%; aspect-ratio: 1 / 1; border-radius:12px; object-fit:cover;
-      border:2px solid var(--line); background:#000; max-height:320px;
-    }
-    .current-info{display:flex; flex-direction:column; gap:6px;}
-    .current-name{font-size:22px; font-weight:900;}
-    .current-meta{font-size:13px; color:var(--muted); display:grid; grid-template-columns:1fr 1fr; gap:4px;}
-    .current-bio{
-      font-size:13px; color:#cfd6f3; background:#0c1122;
-      border:1px solid var(--line); padding:8px; border-radius:10px; min-height:70px;
-      white-space:pre-wrap;
-    }
-    .status-pill{
-      align-self:flex-start; font-size:12px; font-weight:800;
-      padding:4px 8px; border-radius:999px; background:#182043; border:1px solid var(--line);
-    }
-
-    .time-card{
-      background:var(--panel2); border:1px solid var(--line);
-      border-radius:14px; padding:12px; display:flex; align-items:center; justify-content:space-between;
-    }
-    .time-left{display:flex; flex-direction:column; gap:4px;}
-    .time-title{font-size:13px; color:var(--muted); font-weight:800;}
-    .time-player{font-size:18px; font-weight:900;}
-    .time-count{
-      font-size:40px; font-weight:900; letter-spacing:1px; color:var(--warn);
-    }
-
-    .bid-box{
-      background:var(--panel2); border:1px solid var(--line);
-      border-radius:14px; padding:10px; display:flex; flex-direction:column; gap:8px;
-    }
-    .bid-row{display:flex; gap:8px;}
-    .bid-row input{
-      flex:1; background:#0c1122; border:1px solid var(--line); color:var(--text);
-      padding:10px; border-radius:10px; font-size:15px; font-weight:700;
-    }
-    .bid-row button{
-      background:var(--accent); color:#071027; font-weight:900;
-      border:none; border-radius:10px; padding:0 16px; cursor:pointer;
-    }
-    .bid-row button:disabled{opacity:.45; cursor:not-allowed;}
-    .bid-stats{font-size:13px; color:var(--muted); display:flex; justify-content:space-between;}
-
-    .log-card{
-      background:var(--panel2); border:1px solid var(--line);
-      border-radius:14px; padding:10px;
-      min-height:180px; flex:1; overflow:auto;
-    }
-    .log-card .item{
-      font-size:13px; padding:4px 0; border-bottom:1px dashed rgba(255,255,255,0.06);
-    }
-
-    /* ===== Right: Groups only ===== */
-    .right-wrap{gap:10px; display:flex; flex-direction:column; min-height:0;}
-    .groups-card{
-      background:var(--panel2); border:1px solid var(--line);
-      border-radius:14px; padding:10px; flex:1; min-height:0;
-      display:grid; grid-template-rows:auto 1fr auto 1fr; gap:8px;
-    }
-    .group-title{font-size:14px; font-weight:900; color:#dbe2ff; display:flex; align-items:center; gap:6px;}
+    /* group lists */
+    .groups{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
     .group-grid{
-      background:#0c1122; border:1px solid var(--line); border-radius:10px;
-      padding:8px; display:grid; grid-template-columns:repeat(auto-fill, minmax(70px,1fr));
-      gap:8px; overflow:auto; min-height:0;
+      display:grid; grid-template-columns:repeat(auto-fill, minmax(84px,1fr));
+      gap:8px; max-height:420px; overflow:auto; padding-right:4px;
     }
-    .avatar{
-      position:relative; display:flex; flex-direction:column; align-items:center; gap:4px;
+    .player-card{
+      background:var(--panel2); border:1px solid var(--line);
+      border-radius:10px; padding:6px; cursor:pointer;
+      display:flex; flex-direction:column; align-items:center; gap:6px;
+      transition:transform .08s ease, border-color .08s ease;
     }
-    .avatar img{
-      width:66px; height:66px; object-fit:cover; border-radius:8px;
-      border:2px solid transparent; background:#000;
+    .player-card:hover{transform:translateY(-2px); border-color:var(--accent);}
+    .player-img{
+      width:100%; height:70px; object-fit:cover; border-radius:8px;
+      background:#0c0f1a;
     }
-    .avatar .name-tip{font-size:11px; font-weight:800; text-align:center; max-width:70px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-    .avatar.current img{border-color:var(--warn);}
-    .avatar.sold img{opacity:.55;}
-    .avatar.sold-by-leader1 img{border-color:#7aa2ff;}
-    .avatar.sold-by-leader2 img{border-color:#ff7ad6;}
-    .avatar.sold-by-leader3 img{border-color:#62e7a7;}
-    .avatar.sold-by-leader4 img{border-color:#ffcc66;}
+    .player-name{font-size:12px; text-align:center; line-height:1.1;}
 
-    /* ===== Controls ===== */
-    .controls{display:flex; gap:8px; align-items:center;}
-    select{
-      background:#0c1122; border:1px solid var(--line); color:var(--text);
-      padding:7px 10px; border-radius:10px; font-weight:800;
+    /* teams */
+    .teams{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+    .team-head{
+      display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;
     }
-    .admin-controls{display:none; gap:6px;}
-    .admin-controls button{
-      background:#222b52; border:1px solid var(--line); color:#dfe6ff;
-      padding:6px 10px; border-radius:10px; font-weight:800; cursor:pointer;
+    .team-points{font-weight:700; color:var(--good);}
+    .roster{
+      display:grid; grid-template-columns:repeat(5,1fr); gap:6px;
+    }
+    .roster-slot{
+      background:var(--panel2); border:1px solid var(--line);
+      border-radius:8px; height:86px; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:4px; font-size:11px; color:var(--muted);
+      overflow:hidden;
+    }
+    .roster-slot.filled{color:var(--text);}
+    .roster-img{width:100%; height:52px; object-fit:cover;}
+    .roster-name{font-size:11px; font-weight:700; text-align:center; padding:0 2px;}
+    .roster-price{font-size:10px; color:var(--muted);}
+
+    /* bid */
+    .bid-row{display:flex; gap:8px;}
+    input, select, button{
+      background:#0e1220; color:var(--text); border:1px solid var(--line);
+      border-radius:8px; padding:8px 10px; font-size:14px;
+    }
+    button{cursor:pointer; font-weight:700;}
+    button.accent{background:var(--accent); border-color:transparent; color:#081225;}
+    button.warn{background:#ffb020; color:#111;}
+    button.ghost{background:transparent;}
+    .ops{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
+
+    /* logs */
+    .log{
+      max-height:250px; overflow:auto; display:flex; flex-direction:column; gap:6px;
+    }
+    .log-row{
+      font-size:13px; padding:6px 8px; background:var(--panel2);
+      border:1px solid var(--line); border-radius:8px;
     }
 
-    /* ===== Sold Overlay ===== */
-    .overlay{
-      position:fixed; inset:0; background:rgba(2,4,10,.65);
-      display:none; align-items:center; justify-content:center; z-index:9999;
+    /* announcement */
+    #announcementBox{
+      display:none; padding:10px 12px; background:#161a2b; border:1px solid var(--accent);
+      border-radius:10px; font-weight:800; text-align:center;
     }
-    .overlay.show{display:flex; animation:fadeIn .18s ease;}
-    .overlay-card{
-      background:#0f1426; border:2px solid var(--line); border-radius:16px;
-      padding:18px; min-width:320px; text-align:center;
-      box-shadow:0 20px 60px rgba(0,0,0,.6);
-      animation:pop .25s ease;
-    }
-    .overlay-team{font-size:16px; font-weight:900; margin-bottom:10px;}
-    .overlay-photo{
-      width:160px; height:160px; object-fit:cover; border-radius:14px;
-      border:2px solid var(--line); background:#000;
-    }
-    .overlay-name{font-size:22px; font-weight:900; margin-top:8px;}
-    .overlay-price{font-size:16px; font-weight:900; color:var(--warn); margin-top:4px;}
-    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-    @keyframes pop{from{transform:scale(.92)}to{transform:scale(1)}}
 
-    ::-webkit-scrollbar{height:8px;width:8px}
-    ::-webkit-scrollbar-thumb{background:#2a3258;border-radius:10px}
-    ::-webkit-scrollbar-track{background:transparent}
+    @media (max-width: 1100px){
+      .wrap{grid-template-columns:1fr;}
+      .current{grid-template-columns:160px 1fr;}
+      .current-img{width:160px; height:160px;}
+      .roster{grid-template-columns:repeat(3,1fr);}
+    }
   </style>
 </head>
 
 <body>
-  <div class="page">
+  <header>
+    <h1 id="roomTitle">ROOM1</h1>
+    <div class="phase" id="phaseLabel">GROUP A</div>
 
-    <!-- LEFT: TEAM ROSTERS + LOGO BELOW -->
-    <section class="panel">
-      <div class="panel-header">
-        <div class="title">TEAM ROSTER</div>
-        <div class="controls">
-          <span class="dot" id="room-status-dot"></span>
-          <span id="room-status-text" style="font-weight:900;"></span>
-          <span class="badge" id="mode-badge">ROOM1 · REAL · A</span>
+    <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+      <label style="font-size:12px;color:var(--muted)">ROLE</label>
+      <select id="roleSelect">
+        <option value="viewer">viewer</option>
+        <option value="leader1">leader1</option>
+        <option value="leader2">leader2</option>
+        <option value="leader3">leader3</option>
+        <option value="leader4">leader4</option>
+        <option value="operator">operator</option>
+      </select>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <!-- LEFT -->
+    <div class="left">
+      <div id="announcementBox" class="panel"></div>
+
+      <section class="panel current">
+        <div class="current-img">
+          <img id="currentImg" src="" alt="current player" />
         </div>
-      </div>
-
-      <div class="teams-wrap">
-        <div class="team-card" id="team-leader1"></div>
-        <div class="team-card" id="team-leader2"></div>
-        <div class="team-card" id="team-leader3"></div>
-        <div class="team-card" id="team-leader4"></div>
-      </div>
-
-      <!-- ✅ 로고 경로: assets/logo 폴더 -->
-      <div class="left-logo-area">
-        <img src="./assets/logo/cheorwon-esports-logo.png" alt="cheorwon esports logo">
-      </div>
-    </section>
-
-    <!-- MIDDLE: CURRENT AUCTION -->
-    <section class="panel current-wrap">
-      <div class="panel-header">
-        <div class="title">CURRENT AUCTION</div>
-        <div class="controls">
-          <select id="role-select">
-            <option value="viewer">관전</option>
-            <option value="leader1">팀장 1</option>
-            <option value="leader2">팀장 2</option>
-            <option value="leader3">팀장 3</option>
-            <option value="leader4">팀장 4</option>
-            <option value="operator">운영자</option>
-          </select>
-
-          <div class="admin-controls" id="admin-controls">
-            <button id="btn-start-test">테스트 시작</button>
-            <button id="btn-start-real">본 경매 시작</button>
-            <button id="btn-start-remaining">REMAIN 재경매</button>
-            <button id="btn-reset">포인트/전체 리셋</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="current-card">
-        <img id="current-player-photo" class="current-photo" alt="current player"/>
-        <div class="current-info">
-          <div class="current-name" id="current-player-name">-</div>
-          <div class="status-pill" id="current-player-status">대기</div>
-
+        <div>
           <div class="current-meta">
-            <div>ROLE: <b id="current-player-role">-</b></div>
-            <div>GROUP: <b id="current-player-group">-</b></div>
-            <div>BASE: <b id="current-player-base">-</b></div>
-            <div></div>
+            <div class="kv"><div class="k">NAME</div><div class="v" id="currentName">-</div></div>
+            <div class="kv"><div class="k">ROLE</div><div class="v" id="currentRole">-</div></div>
+            <div class="kv"><div class="k">GROUP</div><div class="v" id="currentGroup">-</div></div>
+            <div class="kv"><div class="k">BASE</div><div class="v" id="currentBase">0</div></div>
           </div>
 
-          <div class="current-bio" id="current-player-bio">-</div>
-        </div>
-      </div>
+          <div class="timer-box">
+            <div style="font-weight:700;">TIME LEFT</div>
+            <div class="timer" id="timeLeft">-</div>
+          </div>
 
-      <div class="time-card">
-        <div class="time-left">
-          <div class="time-title">현재 경매중</div>
-          <div class="time-player" id="timer-player-name">-</div>
+          <div class="highest">
+            <div class="kv" style="flex:1;">
+              <div class="k">HIGHEST BID</div>
+              <div class="v" id="highestBid">0</div>
+            </div>
+            <div class="kv" style="flex:1;">
+              <div class="k">BIDDER</div>
+              <div class="v" id="highestBidder">-</div>
+            </div>
+          </div>
         </div>
-        <div class="time-count" id="timer">-</div>
-      </div>
+      </section>
 
-      <div class="bid-box">
+      <section class="panel">
+        <div class="panel-title">BID</div>
         <div class="bid-row">
-          <input id="bid-amount" type="number" placeholder="입찰 금액(5점 단위)" step="5" min="0">
-          <button id="bid-button">입찰</button>
+          <input id="bidInput" type="number" placeholder="입찰 금액" style="flex:1;" />
+          <button id="bidBtn" class="accent">입찰</button>
         </div>
 
-        <div class="bid-stats">
-          <div>최고가: <b id="highest-amount">-</b>점</div>
-          <div>최고 입찰: <b id="highest-leader">-</b></div>
+        <div class="ops">
+          <button id="btnMainStart" class="warn">본경매 시작</button>
+          <button id="btnFinalize" class="ghost">강제 낙찰/유찰 처리</button>
+          <button id="btnResetAll" class="ghost">전체 리셋</button>
+          <button id="btnResetPoints" class="ghost">포인트 리셋</button>
         </div>
-      </div>
+      </section>
 
-      <div class="log-card" id="bid-log"></div>
-    </section>
+      <section class="panel">
+        <div class="panel-title">LOG</div>
+        <div id="logBox" class="log"></div>
+      </section>
+    </div>
 
-    <!-- RIGHT: GROUPS ONLY -->
-    <section class="panel right-wrap">
-      <div class="panel-header">
-        <div class="title">GROUP ROSTER</div>
-      </div>
+    <!-- RIGHT -->
+    <div class="right">
+      <section class="panel groups">
+        <div>
+          <div class="panel-title">GROUP A (available)</div>
+          <div id="groupAList" class="group-grid"></div>
+        </div>
+        <div>
+          <div class="panel-title">GROUP B (available)</div>
+          <div id="groupBList" class="group-grid"></div>
+        </div>
+      </section>
 
-      <div class="groups-card">
-        <div class="group-title">GROUP A</div>
-        <div class="group-grid" id="roster-A"></div>
+      <section class="panel">
+        <div class="panel-title">TEAMS</div>
+        <div class="teams">
+          <div class="panel">
+            <div class="team-head">
+              <div style="font-weight:800;">TEAM 1</div>
+              <div id="team1Points" class="team-points">1000 / 1000</div>
+            </div>
+            <div id="team1Roster" class="roster"></div>
+          </div>
 
-        <div class="group-title">GROUP B</div>
-        <div class="group-grid" id="roster-B"></div>
-      </div>
-    </section>
-  </div>
+          <div class="panel">
+            <div class="team-head">
+              <div style="font-weight:800;">TEAM 2</div>
+              <div id="team2Points" class="team-points">1000 / 1000</div>
+            </div>
+            <div id="team2Roster" class="roster"></div>
+          </div>
 
-  <!-- SOLD Overlay -->
-  <div class="overlay" id="auction-overlay">
-    <div class="overlay-card">
-      <div class="overlay-team" id="auction-overlay-team">SOLD</div>
-      <img class="overlay-photo" id="auction-overlay-photo" alt="sold player"/>
-      <div class="overlay-name" id="auction-overlay-name">-</div>
-      <div class="overlay-price" id="auction-overlay-price">-점</div>
+          <div class="panel">
+            <div class="team-head">
+              <div style="font-weight:800;">TEAM 3</div>
+              <div id="team3Points" class="team-points">1000 / 1000</div>
+            </div>
+            <div id="team3Roster" class="roster"></div>
+          </div>
+
+          <div class="panel">
+            <div class="team-head">
+              <div style="font-weight:800;">TEAM 4</div>
+              <div id="team4Points" class="team-points">1000 / 1000</div>
+            </div>
+            <div id="team4Roster" class="roster"></div>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 
-<script type="module" src="./app.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
-
