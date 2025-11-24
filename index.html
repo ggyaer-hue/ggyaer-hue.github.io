@@ -148,7 +148,7 @@
     .team-leader3{ --team-color: var(--c-leader3); }
     .team-leader4{ --team-color: var(--c-leader4); }
 
-    /* ✅ [방법 A] 팀 로스터 포지션 라벨(TOP/JGL/MID/BOT/SUP) 숨김 */
+    /* ✅ 포지션 라벨 숨김 (TOP/JGL/MID/BOT/SUP 사라짐) */
     .slot-label { display: none !important; }
 
     /* ===== CENTER: CURRENT AUCTION ===== */
@@ -223,7 +223,6 @@
       min-width:46px; text-align:center;
     }
 
-    /* TIME COUNT 아래 로그가 공간 전부 먹기 */
     .bid-log{
       flex:1; min-height:220px; height:auto;
       background:var(--panel2);
@@ -242,7 +241,6 @@
       font-size:12px; padding:6px 8px; border-radius:8px;
     }
 
-    /* 낙찰 오버레이 */
     .auction-overlay{
       position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
       background:rgba(6,9,18,0.65); backdrop-filter: blur(3px);
@@ -279,7 +277,6 @@
     .overlay-name{ font-size:15px; font-weight:900; color:#fff; white-space:nowrap; }
     .overlay-price{ font-size:13px; color:#cbd7f7; margin-top:2px; font-weight:800; }
 
-    /* 로고 패널(작게, 테두리 없음) */
     .center-logo-panel{
       flex:0.50;
       display:flex; align-items:center; justify-content:center;
@@ -292,7 +289,7 @@
       filter: drop-shadow(0 6px 18px rgba(0,0,0,0.6));
     }
 
-    /* ===== RIGHT: GROUP ROSTERS (A/B) ===== */
+    /* ===== RIGHT: GROUP ROSTERS (A/B/UNSOLD) ===== */
     .roster-panel{
       display:flex; flex-direction:column; gap:8px;
       min-height:0; height:100%;
@@ -325,8 +322,6 @@
       display:flex; flex-direction:column; align-items:center; gap:4px;
       padding:4px 0;
     }
-
-    /* ✅ 그룹 로스터 사진: 사각형 + 더 크게 */
     .avatar img{
       width:68px; height:68px;
       border-radius:8px;
@@ -350,10 +345,15 @@
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
 
+    /* ✅ 유찰 박스는 한 줄 전체 폭 */
+    .unsold-box{ grid-column:1 / -1; }
+    .unsold-box .avatars{ grid-template-columns:repeat(6,1fr); }
+
     @media (max-width:1100px){
       .wrap{ grid-template-columns:1fr; height:auto; }
       .roster-grid{ grid-template-columns:1fr; }
       .avatars{ grid-template-columns:repeat(5,1fr); }
+      .unsold-box .avatars{ grid-template-columns:repeat(5,1fr); }
       .center-logo-panel img{ width:42%; max-width:190px; }
       .current-player{ grid-template-columns:108px 1fr; }
       .current-player img{ width:108px; height:108px; }
@@ -449,7 +449,6 @@
             <div>리더: <b id="highest-leader">-</b></div>
           </div>
 
-          <!-- TIME COUNT + 현재 선수 이름 -->
           <div class="timer-bar">
             <div class="timer-left">
               <span>TIME COUNT</span>
@@ -473,7 +472,7 @@
       <div class="panel roster-panel">
         <div class="panel-title">
           <span>그룹별 명단</span>
-          <span class="badge">A / B</span>
+          <span class="badge">A / B / 유찰</span>
         </div>
 
         <div class="roster-grid">
@@ -485,6 +484,12 @@
           <div class="group-box">
             <div class="group-title">GROUP B <span class="pill">1차</span></div>
             <div class="avatars" id="roster-B"></div>
+          </div>
+
+          <!-- ✅ 유찰 그룹 -->
+          <div class="group-box unsold-box">
+            <div class="group-title">UNSOLD <span class="pill">유찰</span></div>
+            <div class="avatars" id="roster-U"></div>
           </div>
         </div>
       </div>
