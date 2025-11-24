@@ -1,5 +1,5 @@
-// app.js (ROOM1 FINAL: UNSOLD + SFX + robust points decrement)
-// -----------------------------------------------------------
+// app.js (ROOM1 FINAL: UNSOLD + SFX + pointsByTeam authoritative)
+// --------------------------------------------------------------
 import { app, db } from "./firebase-config.js";
 import {
   collection, doc, getDocs, onSnapshot, query, orderBy,
@@ -95,6 +95,14 @@ const photoOf    = (p)=>p?.photoUrl||p?.photoURL||p?.imageUrl||p?.image||p?.img|
 const isOperator = ()=>myRole==="operator";
 const myTeamId   = ()=>String(myRole).startsWith("leader")?myRole:null;
 
+// leader1~4 => team1~4 로 canonical key 만들기
+function myCanonTeamKey(){
+  const id = myTeamId();
+  if(!id) return null;
+  const m = String(id).match(/([1-4])$/);
+  return m ? `team${m[1]}` : null;
+}
+
 function getEndsAtMs(r){
   if(!r) return null;
   let v = r.endsAtMs ?? r.endsAt ?? r.endsAtS ?? r.endsAtSec ?? null;
@@ -131,41 +139,14 @@ function buildTeamMaps(){
   return { byDocId, byCanon };
 }
 
-function resolveBidderToTeam(bidderId){
-  const { byDocId, byCanon } = buildTeamMaps();
-
-  if(byDocId.has(bidderId)){
-    const t = byDocId.get(bidderId);
-    const oi = Number(t.orderIndex);
-    const canon = (oi>=1 && oi<=4) ? `team${oi}` : canonicalKeyFromAnyId(t.id);
-    return { canonKey: canon, docId: t.id };
-  }
-
-  const parsedCanon = canonicalKeyFromAnyId(bidderId);
-  if(parsedCanon){
-    const t = byCanon.get(parsedCanon);
-    return { canonKey: parsedCanon, docId: t?.id || null };
-  }
-
-  return { canonKey: null, docId: null };
-}
-
-/** ✅ 트랜잭션 안에서 “실존하는 팀 문서”를 3중 후보로 찾아줌
- * 후보 순서: docId(매핑된 실제 문서) -> canonKey(team1~4) -> bidderId(leader1 등)
- */
-async function findTeamDocInTx(tx, bidderId){
-  const { canonKey, docId } = resolveBidderToTeam(bidderId);
-
-  const candidates = Array.from(new Set([docId, canonKey, bidderId].filter(Boolean)));
-
-  for(const id of candidates){
-    const ref = doc(teamsCol, id);
-    const snap = await tx.get(ref);
-    if(snap.exists()){
-      return { ref, data: snap.data(), id };
-    }
-  }
-  return { ref:null, data:null, id:null, canonKey };
+// room.pointsByTeam 안전하게 만들기
+function normalizePointsByTeam(pointsByTeam){
+  const p = {...(pointsByTeam||{})};
+  CANON_TEAMS.forEach(k=>{
+    const v = Number(p[k]);
+    p[k] = Number.isFinite(v) ? v : TEAM_START_POINTS;
+  });
+  return p;
 }
 
 // ✅ room.rosters 기반 제외 집합
@@ -294,6 +275,7 @@ function renderAll(){
   renderTeams();
   renderAdminControls();
 }
+
 function renderTop(){
   if(!roomState) return;
   const st = roomState.status || "running";
@@ -415,19 +397,23 @@ function renderTeams(){
     });
   }
 
+  const pointsByTeam = normalizePointsByTeam(roomState?.pointsByTeam);
+
   CANON_TEAMS.forEach((canon, idx)=>{
     const box=$.teamBox[canon];
     if(!box) return;
 
     const { byCanon } = buildTeamMaps();
-    const t = byCanon.get(canon) || { name:`TEAM ${idx+1}`, pointsRemaining:TEAM_START_POINTS };
+    const t = byCanon.get(canon) || { name:`TEAM ${idx+1}` };
 
     const roster=buckets[canon].sort((a,b)=>numOrder(a.orderIndex)-numOrder(b.orderIndex));
+
+    const remainPts = pointsByTeam[canon] ?? TEAM_START_POINTS;
 
     box.innerHTML=`
       <div class="team-header">
         <div class="team-name"><span>${t.name||`TEAM ${idx+1}`}</span></div>
-        <div class="team-points">${(t.pointsRemaining??t.points??TEAM_START_POINTS)} / ${TEAM_START_POINTS}</div>
+        <div class="team-points">${remainPts} / ${TEAM_START_POINTS}</div>
       </div>
       <div class="team-row">
         ${[0,1,2,3,4].map((_,i)=>{
@@ -484,6 +470,7 @@ async function pickPlayerAsCurrent(pid){
     currentPlayerId:pid,
     currentGroup:g, group:g, phase:g,
     highestBid:0, highestBidderId:null, highestBidderName:null,
+    highestBidderCanonKey:null,
     endsAtMs:Date.now()+AUCTION_SECONDS*1000,
     status:"running", finalizing:false, announcement:null,
   });
@@ -499,6 +486,7 @@ async function startMainAuction(){
     currentGroup:"A", group:"A", phase:"A",
     currentPlayerId:firstA,
     highestBid:0, highestBidderId:null, highestBidderName:null,
+    highestBidderCanonKey:null,
     endsAtMs:Date.now()+AUCTION_SECONDS*1000,
     announcement:"본경매 시작!", finalizing:false
   });
@@ -516,6 +504,7 @@ async function startRemainingAuction(){
     currentGroup:g, group:g, phase:g,
     currentPlayerId:pid,
     highestBid:0, highestBidderId:null, highestBidderName:null,
+    highestBidderCanonKey:null,
     endsAtMs:Date.now()+AUCTION_SECONDS*1000,
     announcement:"잔여 재경매 시작!", finalizing:false
   });
@@ -526,6 +515,7 @@ async function safeFinalize(reason){
   catch(e){ console.error("[finalizeFull failed]", e); await finalizeRoomOnly(reason); }
 }
 
+// ✅ 1차: players/room(포인트/roster) 업데이트
 async function finalizeFull(reason="sold"){
   await runTransaction(db, async (tx)=>{
     const roomSnap=await tx.get(roomRef);
@@ -548,44 +538,40 @@ async function finalizeFull(reason="sold"){
 
     const highestBid=r.highestBid??0;
     const bidderId=r.highestBidderId||null;
+    const canonKey = r.highestBidderCanonKey || canonicalKeyFromAnyId(bidderId);
 
     // rosters 준비
     const rosters = {...(r.rosters||{})};
     CANON_TEAMS.forEach(k=>{ if(!Array.isArray(rosters[k])) rosters[k]=[]; });
     if(!Array.isArray(rosters[UNSOLD_KEY])) rosters[UNSOLD_KEY]=[];
 
+    // pointsByTeam 준비
+    const pointsByTeam = normalizePointsByTeam(r.pointsByTeam);
+
     tx.update(roomRef,{finalizing:true});
 
-    if(highestBid>0 && bidderId){
-      const tFound = await findTeamDocInTx(tx, bidderId);
-      const canonKey = tFound.canonKey || canonicalKeyFromAnyId(bidderId);
-      const assignedId = tFound.id || bidderId;
-
+    if(highestBid>0 && bidderId && canonKey){
+      // ✅ 선수 sold 처리
       tx.update(curRef,{
         status:"sold",
-        assignedTeamId: assignedId,
+        assignedTeamId: bidderId,
         assignedTeamKey: canonKey,
-        soldBy: assignedId,
+        soldBy: bidderId,
         soldAtMs: Date.now(),
         finalPrice: highestBid,
         updatedAt: serverTimestamp()
       });
 
-      // ✅ 팀 문서가 존재하기만 하면 무조건 차감
-      if(tFound.ref){
-        const remain=(tFound.data.pointsRemaining??tFound.data.points??TEAM_START_POINTS)-highestBid;
-        tx.update(tFound.ref,{pointsRemaining:remain});
-      }
+      // ✅ room.pointsByTeam 차감 (권위 데이터)
+      pointsByTeam[canonKey] = Math.max(0, pointsByTeam[canonKey] - highestBid);
 
-      if(canonKey){
-        rosters[canonKey].push({
-          playerId: curId,
-          name: cur.name || curId,
-          photoUrl: cur.photoUrl || cur.photoURL || cur.imageUrl || "",
-          finalPrice: highestBid,
-          orderIndex: cur.orderIndex ?? rosters[canonKey].length
-        });
-      }
+      rosters[canonKey].push({
+        playerId: curId,
+        name: cur.name || curId,
+        photoUrl: cur.photoUrl || cur.photoURL || cur.imageUrl || "",
+        finalPrice: highestBid,
+        orderIndex: cur.orderIndex ?? rosters[canonKey].length
+      });
     }else{
       tx.update(curRef,{
         status:"unsold",
@@ -619,8 +605,10 @@ async function finalizeFull(reason="sold"){
         currentPlayerId:null,
         currentGroup:nextGroup, group:nextGroup, phase:nextGroup,
         highestBid:0, highestBidderId:null, highestBidderName:null,
+        highestBidderCanonKey:null,
         endsAtMs:null, finalizing:false,
-        rosters, announcement:"경매 종료"
+        rosters, pointsByTeam,
+        announcement:"경매 종료"
       });
       return;
     }
@@ -630,13 +618,15 @@ async function finalizeFull(reason="sold"){
       currentGroup:nextGroup, group:nextGroup, phase:nextGroup,
       currentPlayerId:nextId,
       highestBid:0, highestBidderId:null, highestBidderName:null,
+      highestBidderCanonKey:null,
       endsAtMs:Date.now()+AUCTION_SECONDS*1000,
-      finalizing:false, rosters,
+      finalizing:false, rosters, pointsByTeam,
       announcement: reason==="timeout" ? "유찰 → 다음 선수" : "낙찰 완료!"
     });
   });
 }
 
+// ✅ 2차 fallback: room만 업데이트
 async function finalizeRoomOnly(reason="sold"){
   await runTransaction(db, async (tx)=>{
     const roomSnap=await tx.get(roomRef);
@@ -651,12 +641,13 @@ async function finalizeRoomOnly(reason="sold"){
     const curGroup = normGroup(curLocal.group || r.currentGroup || r.group || "A");
 
     const highestBid=r.highestBid??0;
-    const bidderId=r.highestBidderId||null;
-    const { canonKey } = resolveBidderToTeam(bidderId);
+    const canonKey = r.highestBidderCanonKey || canonicalKeyFromAnyId(r.highestBidderId);
 
     const rosters = {...(r.rosters||{})};
     CANON_TEAMS.forEach(k=>{ if(!Array.isArray(rosters[k])) rosters[k]=[]; });
     if(!Array.isArray(rosters[UNSOLD_KEY])) rosters[UNSOLD_KEY]=[];
+
+    const pointsByTeam = normalizePointsByTeam(r.pointsByTeam);
 
     tx.update(roomRef,{finalizing:true});
 
@@ -667,6 +658,7 @@ async function finalizeRoomOnly(reason="sold"){
         finalPrice: highestBid,
         orderIndex: curLocal.orderIndex ?? rosters[canonKey].length
       });
+      pointsByTeam[canonKey] = Math.max(0, pointsByTeam[canonKey] - highestBid);
     } else {
       rosters[UNSOLD_KEY].push({
         playerId: curId, name: curLocal.name || curId,
@@ -689,8 +681,10 @@ async function finalizeRoomOnly(reason="sold"){
         currentPlayerId:null,
         currentGroup:nextGroup, group:nextGroup, phase:nextGroup,
         highestBid:0, highestBidderId:null, highestBidderName:null,
+        highestBidderCanonKey:null,
         endsAtMs:null, finalizing:false,
-        rosters, announcement:"경매 종료(ROOM 저장모드)"
+        rosters, pointsByTeam,
+        announcement:"경매 종료(ROOM 저장모드)"
       });
       return;
     }
@@ -700,8 +694,9 @@ async function finalizeRoomOnly(reason="sold"){
       currentGroup:nextGroup, group:nextGroup, phase:nextGroup,
       currentPlayerId:nextId,
       highestBid:0, highestBidderId:null, highestBidderName:null,
+      highestBidderCanonKey:null,
       endsAtMs:Date.now()+AUCTION_SECONDS*1000,
-      finalizing:false, rosters,
+      finalizing:false, rosters, pointsByTeam,
       announcement: reason==="timeout" ? "유찰 → 다음 선수(ROOM 저장모드)" : "낙찰 완료!(ROOM 저장모드)"
     });
   });
@@ -709,59 +704,75 @@ async function finalizeRoomOnly(reason="sold"){
 
 // ====== BID ======
 async function placeBid(){
-  const amount=Number($.bidAmount?.value);
-  if(!amount||amount<=0) return alert("입찰 금액을 입력해줘.");
-  if(amount%BID_STEP!==0) return alert(`입찰은 ${BID_STEP}점 단위만 가능해.`);
+  try{
+    const amount=Number($.bidAmount?.value);
+    if(!amount||amount<=0) return alert("입찰 금액을 입력해줘.");
+    if(amount%BID_STEP!==0) return alert(`입찰은 ${BID_STEP}점 단위만 가능해.`);
 
-  const teamId=myTeamId();
-  if(!teamId) return alert("팀장만 입찰 가능.");
+    const teamId=myTeamId();
+    const canonKey = myCanonTeamKey();
+    if(!teamId || !canonKey) return alert("팀장만 입찰 가능.");
 
-  playSfx("bid");
-
-  await runTransaction(db, async (tx)=>{
-    const roomSnap=await tx.get(roomRef);
-    const r=roomSnap.data();
-    const curId=r.currentPlayerId;
-    if(!curId) throw new Error("no current player");
-
-    const curRef=doc(playersCol,curId);
-    const curSnap=await tx.get(curRef);
-    const cur=curSnap.data();
-
-    const g=normGroup(cur.group);
-    const minBid=MIN_BID_BY_GROUP[g]??0;
-    if(amount<minBid) throw new Error(`GROUP ${g}는 최소 ${minBid}점부터`);
-
-    const highest=r.highestBid??0;
-    if(amount<highest+BID_STEP) throw new Error(`최소 ${BID_STEP}점 이상 높여야 함`);
-
-    // ✅ 팀 문서를 후보로 찾아서 있으면 포인트 체크
-    const tFound = await findTeamDocInTx(tx, teamId);
-    if(tFound.ref){
-      const remain=tFound.data.pointsRemaining??tFound.data.points??TEAM_START_POINTS;
-      if(amount>remain) throw new Error("잔여 포인트 부족");
+    // ✅ A그룹 300 미만 즉시 경고
+    const curId = roomState?.currentPlayerId;
+    const curLocal = players.find(p=>p.id===curId);
+    const g = normGroup(curLocal?.group || roomState?.currentGroup || "A");
+    const minBid = MIN_BID_BY_GROUP[g] ?? 0;
+    if(amount < minBid){
+      return alert(`GROUP ${g}는 최소 ${minBid}점부터 입찰 가능해.`);
     }
 
-    tx.update(roomRef,{
-      highestBid:amount,
-      highestBidderId: teamId,
-      highestBidderName: teamId,
-      lastBidAtMs:Date.now()
+    playSfx("bid");
+
+    await runTransaction(db, async (tx)=>{
+      const roomSnap=await tx.get(roomRef);
+      const r=roomSnap.data();
+      const curId=r.currentPlayerId;
+      if(!curId) throw new Error("현재 경매 선수가 없음");
+
+      const curRef=doc(playersCol,curId);
+      const curSnap=await tx.get(curRef);
+      const cur=curSnap.data();
+
+      const g=normGroup(cur.group);
+      const minBid=MIN_BID_BY_GROUP[g]??0;
+      if(amount<minBid) throw new Error(`GROUP ${g}는 최소 ${minBid}점부터 입찰 가능`);
+
+      const highest=r.highestBid??0;
+      if(amount<highest+BID_STEP) throw new Error(`최소 ${BID_STEP}점 이상 높여야 함`);
+
+      // ✅ pointsByTeam에서 잔여 포인트 체크 (권위 데이터)
+      const pointsByTeam = normalizePointsByTeam(r.pointsByTeam);
+      const remain = pointsByTeam[canonKey];
+      if(amount > remain) throw new Error("잔여 포인트 부족");
+
+      // pointsByTeam이 없던 방이면 여기서 한 번 seeded 저장됨
+      tx.update(roomRef,{
+        highestBid:amount,
+        highestBidderId: teamId,
+        highestBidderName: teamId,
+        highestBidderCanonKey: canonKey,
+        lastBidAtMs:Date.now(),
+        pointsByTeam
+      });
+
+      const logRef=doc(logsCol);
+      tx.set(logRef,{
+        createdAt:serverTimestamp(),
+        teamId:teamId,
+        teamName:teamId,
+        playerId:curId,
+        playerName:cur.name||curId,
+        amount,
+        group:g
+      });
     });
 
-    const logRef=doc(logsCol);
-    tx.set(logRef,{
-      createdAt:serverTimestamp(),
-      teamId:teamId,
-      teamName:teamId,
-      playerId:curId,
-      playerName:cur.name||curId,
-      amount,
-      group:g
-    });
-  });
-
-  $.bidAmount.value="";
+    $.bidAmount.value="";
+  }catch(e){
+    alert(e.message || "입찰 실패");
+    console.error(e);
+  }
 }
 
 // ====== RESET ======
@@ -775,8 +786,12 @@ async function resetAll(){
     currentGroup:"A", group:"A", phase:"A",
     currentPlayerId:null,
     highestBid:0, highestBidderId:null, highestBidderName:null,
-    endsAtMs:null, announcement:"전체 리셋 완료", finalizing:false,
-    rosters: { team1:[], team2:[], team3:[], team4:[], unsold:[] }
+    highestBidderCanonKey:null,
+    endsAtMs:null,
+    announcement:"전체 리셋 완료",
+    finalizing:false,
+    rosters: { team1:[], team2:[], team3:[], team4:[], unsold:[] },
+    pointsByTeam: { team1:1000, team2:1000, team3:1000, team4:1000 }
   });
 
   const pSnap=await getDocs(playersCol);
@@ -789,6 +804,7 @@ async function resetAll(){
     });
   });
 
+  // teams 컬렉션 포인트도 같이 리셋해주고 싶다면 유지
   const tSnap=await getDocs(teamsCol);
   tSnap.forEach(d=>batch.update(d.ref,{pointsRemaining:TEAM_START_POINTS}));
 
@@ -808,7 +824,7 @@ function maybeShowOverlay(prev, cur){
     if(!soldPlayer) return;
 
     const price=prev.highestBid??0;
-    const { canonKey } = resolveBidderToTeam(prev.highestBidderId);
+    const canonKey = prev.highestBidderCanonKey;
     const leaderClass = canonKey ? canonKey.replace("team","leader") : null;
     const teamName=prev.highestBidderName||prev.highestBidderId||"유찰";
 
