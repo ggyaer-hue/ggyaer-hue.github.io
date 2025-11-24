@@ -475,17 +475,19 @@ async function resetAll(){
 }
 
 // ====== FINALIZE (sold or unsold) ======
-async function tryFinalizeByTimeout(){
-  if (!roomState || roomState.status!=="bidding" || !roomState.currentPlayerId) return;
+async function tryFinalizeByTimeout() {
+  if (!roomState || roomState.status !== "bidding" || !roomState.currentPlayerId) return;
 
-  const cachedPlayers = playersCache.slice(); // tx에서 query 불가라 캐시로 next 계산
+  // 트랜잭션 안에서 query를 못 쓰니까, 다음 선수 계산은 캐시로
+  const cachedPlayers = playersCache.slice();
   const currentGroupLocal = roomState.currentGroup || "A";
 
   try {
-    await runTransaction(db, async(tx)=>{
+    await runTransaction(db, async (tx) => {
+      // 1) 모든 read를 먼저 끝낸다
       const roomSnap = await tx.get(roomRef);
       const room = roomSnap.data();
-      if (!room || room.status!=="bidding") return;
+      if (!room || room.status !== "bidding") return;
       if (room.finalizing) return;
 
       const curId = room.currentPlayerId;
@@ -496,73 +498,75 @@ async function tryFinalizeByTimeout(){
       const player = playerSnap.data();
       if (!player) return;
 
-      // 락 획득
-      tx.update(roomRef, { finalizing:true });
-
       const highestBid = room.highestBid ?? 0;
       const winnerId = room.highestLeaderId || null;
 
-      // next 계산(캐시)
-      const listSame = cachedPlayers.filter(p=>p.group===currentGroupLocal && p.status==="available" && p.id!==curId).sort(byOrderIndex);
+      // 우승 팀도 여기서 읽기까지 끝내기 (read 완료 후에만 write)
+      let teamRef = null;
+      let team = null;
+      if (highestBid > 0 && winnerId) {
+        teamRef = doc(teamsCol, winnerId);
+        const teamSnap = await tx.get(teamRef);
+        team = teamSnap.data() || { points: TEAM_START_POINTS };
+      }
+
+      // 캐시 기반으로 다음 선수 계산 (여기도 read만)
+      const listSame = cachedPlayers
+        .filter(p => p.group === currentGroupLocal && p.status === "available" && p.id !== curId)
+        .sort(byOrderIndex);
+
       let nextPlayer = listSame[0] || null;
       let nextGroup = currentGroupLocal;
 
-      if (!nextPlayer && currentGroupLocal==="A"){
-        const listB = cachedPlayers.filter(p=>p.group==="B" && p.status==="available").sort(byOrderIndex);
+      if (!nextPlayer && currentGroupLocal === "A") {
+        const listB = cachedPlayers
+          .filter(p => p.group === "B" && p.status === "available")
+          .sort(byOrderIndex);
         nextPlayer = listB[0] || null;
-        nextGroup = nextPlayer ? "B" : "A";
+        if (nextPlayer) nextGroup = "B";
       }
 
-      const endsAtMs = nextPlayer ? (nowMs()+AUCTION_SECONDS*1000) : null;
+      const endsAtMs = nextPlayer ? nowMs() + AUCTION_SECONDS * 1000 : null;
       const newStatus = nextPlayer ? "bidding" : "finished";
 
-      if (highestBid>0 && winnerId){
-        // SOLD
-        const teamRef = doc(teamsCol, winnerId);
-        const teamSnap = await tx.get(teamRef);
-        const team = teamSnap.data() || {};
-        if ((team.points ?? TEAM_START_POINTS) >= highestBid){
-          tx.update(playerRef, {
-            status:"sold",
-            assignedTeamId:winnerId,
-            finalPrice:highestBid,
-            soldBy:winnerId,
-            soldAtMs: nowMs(),
-            updatedAt: serverTimestamp()
-          });
-          tx.update(teamRef, { points: increment(-highestBid) });
+      // 2) 여기부터가 write 구간
+      const roomPatch = {
+        status: newStatus,
+        currentGroup: nextGroup,
+        currentPlayerId: nextPlayer ? nextPlayer.id : null,
+        endsAtMs,
+        highestBid: 0,
+        highestLeaderId: null,
+        finalizing: false,
+        updatedAt: serverTimestamp()
+      };
 
-          // overlay: tx 밖에서 띄우려면 최소데이터 room에 저장
-          tx.update(roomRef, { lastSold: {playerId:curId, teamId:winnerId, price:highestBid} });
-        } else {
-          // 포인트 부족이면 유찰 처리
-          tx.update(playerRef, {
-            status:"unsold",
-            finalPrice:null,
-            updatedAt: serverTimestamp()
-          });
-        }
-      } else {
-        // UNSOLD
+      if (highestBid > 0 && winnerId && team && (team.points ?? TEAM_START_POINTS) >= highestBid) {
+        // ✅ 낙찰
         tx.update(playerRef, {
-          status:"unsold",
-          finalPrice:null,
+          status: "sold",
+          assignedTeamId: winnerId,
+          finalPrice: highestBid,
+          soldBy: winnerId,
+          soldAtMs: nowMs(),
+          updatedAt: serverTimestamp()
+        });
+        tx.update(teamRef, { points: increment(-highestBid) });
+
+        // overlay 표시용 정보
+        roomPatch.lastSold = { playerId: curId, teamId: winnerId, price: highestBid };
+      } else {
+        // ❌ 유찰 (포인트 부족 포함)
+        tx.update(playerRef, {
+          status: "unsold",
+          finalPrice: null,
           updatedAt: serverTimestamp()
         });
       }
 
-      tx.update(roomRef, {
-        status:newStatus,
-        currentGroup: nextGroup,
-        currentPlayerId: nextPlayer ? nextPlayer.id : null,
-        endsAtMs,
-        highestBid:0,
-        highestLeaderId:null,
-        finalizing:false,
-        updatedAt: serverTimestamp()
-      });
+      tx.update(roomRef, roomPatch);
     });
-  } catch(e){
+  } catch (e) {
     console.error("finalize error", e);
   }
 }
