@@ -1,5 +1,5 @@
-// app.js (ROOM1 FINAL, role-independent allocation)
-// -----------------------------------------------
+// app.js (ROOM1 FINAL, role-independent finalize on timeout)
+// ---------------------------------------------------------
 import { app, db } from "./firebase-config.js";
 import {
   collection, doc, getDocs, onSnapshot, query, orderBy,
@@ -14,7 +14,7 @@ const AUCTION_SECONDS = 15;
 const BID_STEP = 5;
 const TEAM_START_POINTS = 1000;
 const MIN_BID_BY_GROUP = { A: 300, B: 0 };
-const CANON_TEAMS = ["team1","team2","team3","team4"];   // ✅ 역할과 무관한 “정규 팀 키”
+const CANON_TEAMS = ["team1","team2","team3","team4"]; // role과 무관한 정규 팀 키
 
 // ====== FIRESTORE REFS ======
 const roomRef    = doc(db, "rooms", ROOM_ID);
@@ -63,6 +63,7 @@ const $ = {
   overlayName: el("auction-overlay-name"),
   overlayPrice: el("auction-overlay-price"),
 
+  // team boxes are fixed to team1~4
   teamBox: {
     team1: el("team-leader1"),
     team2: el("team-leader2"),
@@ -81,6 +82,9 @@ let teams = [];
 let myRole = "viewer";
 let tickTimer = null;
 
+// 타임아웃 중복 호출 방지용
+let timeoutFiredForEndsAt = null;
+
 // ====== HELPERS ======
 const normGroup  = (g)=>String(g||"A").trim().toUpperCase();
 const normStatus = (s)=>String(s||"available").trim().toLowerCase();
@@ -94,8 +98,7 @@ const myTeamId   = ()=>String(myRole).startsWith("leader")?myRole:null;
 function canonicalKeyFromAnyId(anyId){
   if(!anyId) return null;
   const s = String(anyId).toLowerCase();
-  // leader1 / team1 / "1" 등 모두 team1로
-  const m = s.match(/([1-4])$/);
+  const m = s.match(/([1-4])$/);   // leader1, team2, "3" → team3
   if(m) return `team${m[1]}`;
   return null;
 }
@@ -141,7 +144,6 @@ function resolveBidderToTeam(bidderId){
     return { canonKey: parsedCanon, docId: t?.id || null };
   }
 
-  // (C) 아무것도 못 찾으면 그냥 null (그래도 화면은 “미분류/유찰”)
   return { canonKey: null, docId: null };
 }
 
@@ -149,6 +151,13 @@ function resolveBidderToTeam(bidderId){
 onSnapshot(roomRef, (snap)=>{
   prevRoomState = roomState;
   roomState = snap.exists()?snap.data():null;
+
+  // endsAt이 바뀌면 timeoutFired 리셋
+  if(roomState?.endsAtMs && roomState.endsAtMs !== timeoutFiredForEndsAt){
+    // 새 라운드 시작임
+    timeoutFiredForEndsAt = null;
+  }
+
   maybeShowOverlay(prevRoomState, roomState);
   renderAll();
   syncTick();
@@ -264,7 +273,6 @@ function avatarItem(p){
   if(roomState?.currentPlayerId===p.id) wrap.classList.add("current");
   if(st==="sold"||st==="unsold") wrap.classList.add("sold");
 
-  // ✅ role 무시, assignedTeamId만으로 색칠(leaderX 클래스는 CSS용)
   const canon = p.assignedTeamKey || canonicalKeyFromAnyId(p.assignedTeamId);
   if(canon){
     const leaderClass = canon.replace("team","leader");
@@ -284,19 +292,16 @@ function avatarItem(p){
 function renderTeams(){
   const soldPlayers=players.filter(p=>normStatus(p.status)==="sold");
 
-  // ✅ canonical team 기준으로 무조건 들어가게 bucket
   const buckets={team1:[],team2:[],team3:[],team4:[]};
   soldPlayers.forEach(p=>{
     const canon = p.assignedTeamKey || canonicalKeyFromAnyId(p.assignedTeamId);
     if(canon && buckets[canon]) buckets[canon].push(p);
   });
 
-  // team 박스 4개를 canonical team1~4에 고정
   CANON_TEAMS.forEach((canon, idx)=>{
     const box=$.teamBox[canon];
     if(!box) return;
 
-    // 팀 이름/포인트는 teams에서 있으면 사용, 없어도 표시됨
     const { byCanon } = buildTeamMaps();
     const t = byCanon.get(canon) || { name:`TEAM ${idx+1}`, pointsRemaining:TEAM_START_POINTS };
 
@@ -338,11 +343,14 @@ function syncTick(){
       if($.timer) $.timer.textContent="-";
       return;
     }
+
     const leftMs=roomState.endsAtMs-Date.now();
     const leftSec=Math.max(0,Math.ceil(leftMs/1000));
     if($.timer) $.timer.textContent=leftSec;
 
-    if(leftSec<=0 && isOperator()){
+    // ✅ 역할 상관없이 타임아웃이면 누구든 finalize 시도
+    if(leftSec<=0 && timeoutFiredForEndsAt !== roomState.endsAtMs){
+      timeoutFiredForEndsAt = roomState.endsAtMs;
       finalizeCurrentAuction("timeout").catch(console.error);
     }
   },250);
@@ -417,7 +425,9 @@ async function finalizeCurrentAuction(reason="sold"){
     const roomSnap=await tx.get(roomRef);
     if(!roomSnap.exists()) throw new Error("room missing");
     const r=roomSnap.data();
-    if(r.finalizing) return;
+
+    // 이미 끝났거나 finalizing이면 종료
+    if(r.finalizing || r.status!=="running") return;
 
     const curId=r.currentPlayerId;
     if(!curId){ tx.update(roomRef,{finalizing:false}); return; }
@@ -438,14 +448,13 @@ async function finalizeCurrentAuction(reason="sold"){
     tx.update(roomRef,{finalizing:true});
 
     if(highestBid>0 && bidderId){
-      // ✅ role 무시하고 bidderId를 canonical team으로 강제 해결
       const { canonKey, docId } = resolveBidderToTeam(bidderId);
       const assignedId = docId || bidderId;
 
       tx.update(curRef,{
         status:"sold",
-        assignedTeamId: assignedId,   // 실제 doc id가 있으면 그걸로
-        assignedTeamKey: canonKey,    // ✅ team1~4 저장 (렌더 고정)
+        assignedTeamId: assignedId,
+        assignedTeamKey: canonKey, // ✅ team1~4 저장
         finalPrice: highestBid,
         updatedAt: serverTimestamp()
       });
@@ -531,8 +540,8 @@ async function placeBid(){
     const highest=r.highestBid??0;
     if(amount<highest+BID_STEP) throw new Error(`최소 ${BID_STEP}점 이상 높여야 함`);
 
-    // 포인트 체크: teams에 leader id가 없으면 그냥 통과(역할 영향 제거)
-    const { canonKey, docId } = resolveBidderToTeam(teamId);
+    // 포인트 체크(teams 문서가 있을 때만)
+    const { docId } = resolveBidderToTeam(teamId);
     if(docId){
       const teamRef=doc(teamsCol,docId);
       const teamSnap=await tx.get(teamRef);
