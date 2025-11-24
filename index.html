@@ -1,265 +1,492 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ROOM1 Auction</title>
+  <title>Real-time Auction Draft</title>
 
   <style>
     :root{
-      --bg:#0b0e14; --panel:#141824; --panel2:#101321;
-      --line:#23283a; --text:#e6e8ef; --muted:#9aa3b2; --accent:#7aa2ff;
-      --good:#35d49a; --warn:#ffb020;
+      --bg:#0b1020;
+      --panel:#141a2d;
+      --panel2:#0f1527;
+      --line:#1f2a49;
+      --text:#e6ecff;
+      --muted:#9fb0d9;
+
+      --c-leader1:#7aa2ff;
+      --c-leader2:#ff7ad6;
+      --c-leader3:#62e7a7;
+      --c-leader4:#ffcc66;
     }
     *{box-sizing:border-box}
     body{
       margin:0; background:var(--bg); color:var(--text);
       font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     }
-    header{
-      display:flex; align-items:center; gap:12px;
-      padding:12px 16px; border-bottom:1px solid var(--line);
-      background:linear-gradient(180deg,#0f1220,#0b0e14);
-      position:sticky; top:0; z-index:5;
-    }
-    header h1{margin:0; font-size:18px; letter-spacing:.5px;}
-    header .phase{color:var(--muted); font-size:14px;}
 
-    .wrap{display:grid; grid-template-columns: 1.2fr .8fr; gap:12px; padding:12px;}
-    .left, .right{display:flex; flex-direction:column; gap:12px;}
-
-    .panel{
-      background:var(--panel); border:1px solid var(--line);
-      border-radius:14px; padding:12px;
-      box-shadow:0 10px 30px rgba(0,0,0,.25);
-    }
-    .panel-title{font-size:14px; color:var(--muted); margin-bottom:8px;}
-
-    /* current */
-    .current{
-      display:grid; grid-template-columns: 220px 1fr; gap:12px;
-    }
-    .current-img{
-      width:220px; height:220px; background:var(--panel2);
-      border-radius:12px; overflow:hidden; border:1px solid var(--line);
-      display:flex; align-items:center; justify-content:center;
-    }
-    .current-img img{width:100%; height:100%; object-fit:cover;}
-    .current-meta{
-      display:grid; grid-template-columns:1fr 1fr; gap:8px;
-      font-size:15px;
-    }
-    .kv{background:var(--panel2); border:1px solid var(--line); padding:8px; border-radius:10px;}
-    .kv .k{font-size:12px; color:var(--muted);}
-    .kv .v{font-size:18px; font-weight:700; margin-top:2px;}
-
-    .timer-box{
+    /* ===== TOP BAR ===== */
+    .topbar{
       display:flex; align-items:center; justify-content:space-between;
-      background:var(--panel2); border:1px dashed var(--line);
-      padding:8px 10px; border-radius:10px; margin-top:8px;
+      padding:10px 14px; background:#0a0f1e; border-bottom:1px solid var(--line);
+      position:sticky; top:0; z-index:10;
     }
-    .timer{font-size:28px; font-weight:800; color:var(--warn);}
-    .highest{display:flex; gap:8px; margin-top:8px;}
+    .topbar-left{display:flex; gap:10px; align-items:center;}
+    .brand{
+      font-weight:800; letter-spacing:0.5px; font-size:18px;
+      background:linear-gradient(90deg,#7aa2ff,#c677ff,#ff7ad6);
+      -webkit-background-clip:text; background-clip:text; color:transparent;
+    }
+    .status{
+      display:flex; align-items:center; gap:8px;
+      font-size:13px; color:var(--muted);
+    }
+    .dot{
+      width:8px; height:8px; border-radius:99px; background:#666;
+      box-shadow:0 0 10px rgba(255,255,255,0.2);
+    }
+    .dot.bidding{ background:#62e7a7; box-shadow:0 0 10px rgba(98,231,167,0.8); }
+    .dot.finished{ background:#ff6b6b; }
 
-    /* group lists */
-    .groups{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
-    .group-grid{
-      display:grid; grid-template-columns:repeat(auto-fill, minmax(84px,1fr));
-      gap:8px; max-height:420px; overflow:auto; padding-right:4px;
+    select, input, button{
+      background:#0e1430; color:var(--text);
+      border:1px solid var(--line); border-radius:10px;
+      padding:8px 10px; outline:none;
     }
-    .player-card{
+    button{ cursor:pointer; font-weight:700; }
+    button:hover{ border-color:#2c3c66; transform:translateY(-1px); }
+    button:disabled{ opacity:0.4; cursor:not-allowed; transform:none; }
+    .badge{
+      font-size:12px; padding:6px 8px; border-radius:999px;
+      background:#0f1735; border:1px solid var(--line); color:var(--muted);
+    }
+
+    /* ===== MAIN LAYOUT ===== */
+    .wrap{
+      display:grid;
+      grid-template-columns: 1.05fr 1.05fr 1.45fr;
+      gap:10px; padding:10px;
+      height:calc(100vh - 56px);
+    }
+    .col{
+      display:flex; flex-direction:column; gap:10px;
+      min-height:0;
+    }
+    .panel{
+      background:var(--panel);
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:10px;
+      box-shadow:0 8px 24px rgba(0,0,0,0.25);
+      min-height:0;
+    }
+    .panel-title{
+      font-weight:800; font-size:14px; color:#cfe0ff;
+      display:flex; justify-content:space-between; align-items:center;
+      margin-bottom:8px;
+    }
+
+    /* ===== LEFT: TEAMS ===== */
+    .col-left{ flex:1; }
+    .team-card{
+      padding:8px; position:relative;
+      flex:1; display:flex; flex-direction:column;
+    }
+    .team-card::after{
+      content:""; position:absolute; inset:-1px;
+      border-radius:14px; pointer-events:none;
+      border:1px solid color-mix(in srgb, var(--team-color) 60%, transparent);
+      box-shadow:0 0 22px color-mix(in srgb, var(--team-color) 30%, transparent);
+    }
+    .team-header{
+      display:flex; justify-content:space-between; align-items:center;
+      font-size:14px; font-weight:900; margin-bottom:6px;
+    }
+    .team-header .team-name{
+      display:flex; align-items:center; gap:6px;
+      color:var(--team-color);
+      text-shadow:0 0 12px color-mix(in srgb, var(--team-color) 60%, transparent);
+    }
+    .team-points{
+      font-size:12px; color:var(--muted);
+      padding:4px 8px; border-radius:999px; background:var(--panel2);
+      border:1px solid var(--line);
+    }
+    .team-row{
+      display:grid; grid-template-columns: repeat(5, 1fr);
+      gap:8px; flex:1; grid-auto-rows:1fr; align-content:stretch;
+    }
+    .slot{
+      background:var(--panel2);
+      border:1px dashed #2a3660;
+      border-radius:12px;
+      padding:6px; display:flex; flex-direction:column;
+      align-items:center; justify-content:flex-start;
+      min-height:96px; position:relative;
+    }
+    .slot.empty{ opacity:0.75; }
+    .slot img{
+      width:48px; height:48px; border-radius:999px; object-fit:cover;
+      border:2px solid var(--team-color);
+      box-shadow:0 0 10px color-mix(in srgb, var(--team-color) 40%, transparent);
+      background:#0a0f1e;
+    }
+    .slot-text{ margin-top:6px; text-align:center; line-height:1.1; width:100%; }
+    .slot-name{
+      font-size:12px; font-weight:800; color:#eaf0ff;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .slot-price{ font-size:11px; color:var(--muted); margin-top:2px; }
+    .slot-label{
+      position:absolute; top:6px; left:6px;
+      font-size:10px; color:#9fb0d9; background:#0c1226;
+      padding:2px 6px; border-radius:999px; border:1px solid var(--line);
+    }
+
+    .team-leader1{ --team-color: var(--c-leader1); }
+    .team-leader2{ --team-color: var(--c-leader2); }
+    .team-leader3{ --team-color: var(--c-leader3); }
+    .team-leader4{ --team-color: var(--c-leader4); }
+
+    /* ===== CENTER: CURRENT AUCTION ===== */
+    .col-center{ display:flex; flex-direction:column; min-height:0; }
+
+    .current-auction-panel{
+      flex:1.55; display:flex; flex-direction:column; min-height:0;
+    }
+    .current-wrap{
+      display:flex; flex-direction:column; gap:10px;
+      position:relative; flex:1; min-height:0;
+    }
+
+    .current-player{
+      display:grid;
+      grid-template-columns:120px 1fr;
+      gap:14px; align-items:center;
+    }
+    .current-player img{
+      width:120px; height:120px;
+      border-radius:18px; object-fit:cover;
+      border:3px solid #3b4f86; background:#0a0f1e;
+      box-shadow:0 0 18px rgba(0,0,0,0.6);
+    }
+    .current-name{ font-size:19px; font-weight:900; margin-bottom:4px; }
+    .current-meta{
+      font-size:12px; color:var(--muted);
+      display:flex; gap:8px; flex-wrap:wrap;
+    }
+    .meta-chip{
+      padding:3px 7px; background:var(--panel2);
+      border:1px solid var(--line); border-radius:999px;
+    }
+    .current-bio{
+      margin-top:8px; font-size:12.5px; color:#cbd7f7; opacity:0.95;
       background:var(--panel2); border:1px solid var(--line);
-      border-radius:10px; padding:6px; cursor:pointer;
-      display:flex; flex-direction:column; align-items:center; gap:6px;
-      transition:transform .08s ease, border-color .08s ease;
+      border-radius:10px; padding:7px 9px;
     }
-    .player-card:hover{transform:translateY(-2px); border-color:var(--accent);}
-    .player-img{
-      width:100%; height:70px; object-fit:cover; border-radius:8px;
-      background:#0c0f1a;
-    }
-    .player-name{font-size:12px; text-align:center; line-height:1.1;}
 
-    /* teams */
-    .teams{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
-    .team-head{
-      display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;
-    }
-    .team-points{font-weight:700; color:var(--good);}
-    .roster{
-      display:grid; grid-template-columns:repeat(5,1fr); gap:6px;
-    }
-    .roster-slot{
+    .bid-box{ display:flex; gap:6px; align-items:center; }
+    .bid-box input{ flex:1; }
+    .bid-box button{ width:92px; }
+
+    .highest{
+      display:flex; justify-content:space-between; gap:8px;
+      font-size:12px; color:var(--muted);
       background:var(--panel2); border:1px solid var(--line);
-      border-radius:8px; height:86px; display:flex; flex-direction:column;
-      align-items:center; justify-content:center; gap:4px; font-size:11px; color:var(--muted);
-      overflow:hidden;
+      border-radius:10px; padding:6px 8px;
     }
-    .roster-slot.filled{color:var(--text);}
-    .roster-img{width:100%; height:52px; object-fit:cover;}
-    .roster-name{font-size:11px; font-weight:700; text-align:center; padding:0 2px;}
-    .roster-price{font-size:10px; color:var(--muted);}
+    .highest b{ color:var(--text); }
 
-    /* bid */
-    .bid-row{display:flex; gap:8px;}
-    input, select, button{
-      background:#0e1220; color:var(--text); border:1px solid var(--line);
-      border-radius:8px; padding:8px 10px; font-size:14px;
+    /* TIME COUNT + 현재 선수 이름 */
+    .timer-bar{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:8px 10px; border-radius:10px;
+      background:linear-gradient(90deg,#24325a,#1b2747);
+      border:1px solid var(--line); font-size:13px;
     }
-    button{cursor:pointer; font-weight:700;}
-    button.accent{background:var(--accent); border-color:transparent; color:#081225;}
-    button.warn{background:#ffb020; color:#111;}
-    button.ghost{background:transparent;}
-    .ops{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px;}
-
-    /* logs */
-    .log{
-      max-height:250px; overflow:auto; display:flex; flex-direction:column; gap:6px;
+    .timer-left{
+      display:flex; align-items:center; gap:8px; font-weight:800;
     }
-    .log-row{
-      font-size:13px; padding:6px 8px; background:var(--panel2);
-      border:1px solid var(--line); border-radius:8px;
+    .timer-player-name{
+      font-size:13px; color:#fff; opacity:.92;
+      padding:2px 6px; border-radius:6px;
+      background:#0c1226; border:1px solid var(--line);
+      max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    #timer{
+      font-weight:900; font-size:18px; color:#fff;
+      padding:2px 9px; border-radius:8px; background:#0c1226;
+      border:1px solid var(--line);
+      min-width:46px; text-align:center;
     }
 
-    /* announcement */
-    #announcementBox{
-      display:none; padding:10px 12px; background:#161a2b; border:1px solid var(--accent);
-      border-radius:10px; font-weight:800; text-align:center;
+    /* TIME COUNT 아래 로그가 공간 전부 먹기 */
+    .bid-log{
+      flex:1; min-height:220px; height:auto;
+      background:var(--panel2);
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:6px 8px;
+      overflow:auto;
+      font-size:12px; line-height:1.45;
+    }
+    .bid-log .item{ padding:2px 0; border-bottom:1px dashed #1f2a49; }
+
+    #admin-controls{
+      display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;
+    }
+    #admin-controls button{
+      font-size:12px; padding:6px 8px; border-radius:8px;
     }
 
-    @media (max-width: 1100px){
-      .wrap{grid-template-columns:1fr;}
-      .current{grid-template-columns:160px 1fr;}
-      .current-img{width:160px; height:160px;}
-      .roster{grid-template-columns:repeat(3,1fr);}
+    /* 낙찰 오버레이 */
+    .auction-overlay{
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      background:rgba(6,9,18,0.65); backdrop-filter: blur(3px);
+      border-radius:12px; z-index:5; opacity:0; pointer-events:none;
+      transform:scale(0.98);
+    }
+    .auction-overlay.show{ animation: overlayIn 1.4s ease forwards; }
+    @keyframes overlayIn{
+      0%{opacity:0; transform:scale(0.98);}
+      15%{opacity:1; transform:scale(1.02);}
+      70%{opacity:1; transform:scale(1.0);}
+      100%{opacity:0; transform:scale(0.98);}
+    }
+    .overlay-card{
+      min-width:240px;
+      background:linear-gradient(180deg,#121a35,#0d1328);
+      border:1px solid #2c3c66;
+      border-radius:14px;
+      padding:12px;
+      box-shadow:0 0 40px rgba(0,0,0,0.6);
+      text-align:center;
+    }
+    .overlay-team{
+      font-size:16px; font-weight:900; margin-bottom:8px;
+      text-shadow:0 0 14px currentColor;
+    }
+    .overlay-player{ display:flex; gap:10px; align-items:center; justify-content:center; }
+    .overlay-player img{
+      width:62px; height:62px; border-radius:999px; object-fit:cover;
+      border:3px solid currentColor;
+      box-shadow:0 0 16px color-mix(in srgb, currentColor 60%, transparent);
+      background:#0a0f1e;
+    }
+    .overlay-name{ font-size:15px; font-weight:900; color:#fff; white-space:nowrap; }
+    .overlay-price{ font-size:13px; color:#cbd7f7; margin-top:2px; font-weight:800; }
+
+    /* 로고 패널(작게, 테두리 없음) */
+    .center-logo-panel{
+      flex:0.50;
+      display:flex; align-items:center; justify-content:center;
+      background:transparent; border:none; box-shadow:none; border-radius:0;
+      padding:0; min-height:120px;
+    }
+    .center-logo-panel img{
+      width:46%; max-width:200px; height:auto; object-fit:contain;
+      opacity:0.92;
+      filter: drop-shadow(0 6px 18px rgba(0,0,0,0.6));
+    }
+
+    /* ===== RIGHT: GROUP ROSTERS (A/B) ===== */
+    .roster-panel{
+      display:flex; flex-direction:column; gap:8px;
+      min-height:0; height:100%;
+    }
+    .roster-grid{
+      display:grid; grid-template-columns:1fr 1fr; gap:8px;
+      min-height:0; height:100%;
+    }
+    .group-box{
+      background:var(--panel2);
+      border:1px solid var(--line); border-radius:12px;
+      padding:8px; display:flex; flex-direction:column; min-height:0;
+    }
+    .group-title{
+      font-weight:900; font-size:14px; margin-bottom:8px;
+      display:flex; align-items:center; gap:6px;
+    }
+    .group-title .pill{
+      font-size:11px; color:var(--muted); padding:2px 6px;
+      border:1px solid var(--line); border-radius:999px;
+      background:#0c1226;
+    }
+
+    .avatars{
+      display:grid; grid-template-columns:repeat(4,1fr);
+      gap:8px; overflow:auto; padding-right:2px; min-height:0;
+    }
+    .avatar{
+      position:relative;
+      display:flex; flex-direction:column; align-items:center; gap:4px;
+      padding:4px 0;
+    }
+
+    /* ✅ 그룹 로스터 사진: 사각형 + 더 크게 */
+    .avatar img{
+      width:68px; height:68px;
+      border-radius:8px;
+      object-fit:cover;
+      border:2px solid #3b4f86; background:#0a0f1e;
+      filter:saturate(1.05); transition:all .2s ease;
+    }
+
+    .avatar.current img{
+      border-color:#7aa2ff; box-shadow:0 0 14px rgba(122,162,255,0.7);
+    }
+    .avatar.sold-by-leader1 img{ border-color:var(--c-leader1); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader1) 60%, transparent); }
+    .avatar.sold-by-leader2 img{ border-color:var(--c-leader2); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader2) 60%, transparent); }
+    .avatar.sold-by-leader3 img{ border-color:var(--c-leader3); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader3) 60%, transparent); }
+    .avatar.sold-by-leader4 img{ border-color:var(--c-leader4); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader4) 60%, transparent); }
+    .avatar.sold img{ opacity:0.55; }
+
+    .name-tip{
+      font-size:11px; color:#e7eeff; font-weight:700;
+      text-align:center; max-width:86px;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+
+    @media (max-width:1100px){
+      .wrap{ grid-template-columns:1fr; height:auto; }
+      .roster-grid{ grid-template-columns:1fr; }
+      .avatars{ grid-template-columns:repeat(5,1fr); }
+      .center-logo-panel img{ width:42%; max-width:190px; }
+      .current-player{ grid-template-columns:108px 1fr; }
+      .current-player img{ width:108px; height:108px; }
     }
   </style>
 </head>
 
 <body>
-  <header>
-    <h1 id="roomTitle">ROOM1</h1>
-    <div class="phase" id="phaseLabel">GROUP A</div>
-
-    <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
-      <label style="font-size:12px;color:var(--muted)">ROLE</label>
-      <select id="roleSelect">
-        <option value="viewer">viewer</option>
-        <option value="leader1">leader1</option>
-        <option value="leader2">leader2</option>
-        <option value="leader3">leader3</option>
-        <option value="leader4">leader4</option>
-        <option value="operator">operator</option>
-      </select>
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="brand">AUCTION DRAFT</div>
+      <div class="status">
+        <div id="room-status-dot" class="dot"></div>
+        <div id="room-status-text">대기중</div>
+      </div>
+      <div id="mode-badge" class="badge">ROOM1 · REAL · A</div>
     </div>
-  </header>
 
+    <div class="topbar-right">
+      <select id="role-select">
+        <option value="viewer">관전자</option>
+        <option value="leader1">팀장 1</option>
+        <option value="leader2">팀장 2</option>
+        <option value="leader3">팀장 3</option>
+        <option value="leader4">팀장 4</option>
+        <option value="operator">운영자</option>
+      </select>
+
+      <div id="admin-controls" style="display:none;">
+        <button id="btn-start-test">테스트 시작</button>
+        <button id="btn-start-real">본경매 시작</button>
+        <button id="btn-start-remaining">잔여 재경매</button>
+        <button id="btn-reset">포인트/전체 리셋</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
   <div class="wrap">
-    <!-- LEFT -->
-    <div class="left">
-      <div id="announcementBox" class="panel"></div>
 
-      <section class="panel current">
-        <div class="current-img">
-          <img id="currentImg" src="" alt="current player" />
+    <!-- LEFT COLUMN -->
+    <div class="col col-left">
+      <div class="panel team-card team-leader1" id="team-leader1"></div>
+      <div class="panel team-card team-leader2" id="team-leader2"></div>
+      <div class="panel team-card team-leader3" id="team-leader3"></div>
+      <div class="panel team-card team-leader4" id="team-leader4"></div>
+    </div>
+
+    <!-- CENTER COLUMN -->
+    <div class="col col-center">
+      <div class="panel current-auction-panel">
+        <div class="panel-title">
+          <span>Current Auction</span>
+          <span class="badge" id="current-player-status">-</span>
         </div>
-        <div>
-          <div class="current-meta">
-            <div class="kv"><div class="k">NAME</div><div class="v" id="currentName">-</div></div>
-            <div class="kv"><div class="k">ROLE</div><div class="v" id="currentRole">-</div></div>
-            <div class="kv"><div class="k">GROUP</div><div class="v" id="currentGroup">-</div></div>
-            <div class="kv"><div class="k">BASE</div><div class="v" id="currentBase">0</div></div>
+
+        <div class="current-wrap">
+          <!-- Sold Overlay -->
+          <div id="auction-overlay" class="auction-overlay">
+            <div class="overlay-card">
+              <div id="auction-overlay-team" class="overlay-team">-</div>
+              <div class="overlay-player">
+                <img id="auction-overlay-photo" src="" alt="">
+                <div>
+                  <div id="auction-overlay-name" class="overlay-name">-</div>
+                  <div id="auction-overlay-price" class="overlay-price">-</div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="timer-box">
-            <div style="font-weight:700;">TIME LEFT</div>
-            <div class="timer" id="timeLeft">-</div>
+          <div class="current-player">
+            <img id="current-player-photo" src="" alt="" />
+            <div>
+              <div class="current-name" id="current-player-name">-</div>
+              <div class="current-meta">
+                <div class="meta-chip">ROLE: <b id="current-player-role">-</b></div>
+                <div class="meta-chip">GROUP: <b id="current-player-group">-</b></div>
+                <div class="meta-chip">BASE: <b id="current-player-base">-</b></div>
+              </div>
+              <div class="current-bio" id="current-player-bio">-</div>
+            </div>
+          </div>
+
+          <div class="bid-box">
+            <input type="number" id="bid-amount" placeholder="입찰 금액(5단위)" step="5" min="0" />
+            <button id="bid-button">입찰</button>
           </div>
 
           <div class="highest">
-            <div class="kv" style="flex:1;">
-              <div class="k">HIGHEST BID</div>
-              <div class="v" id="highestBid">0</div>
-            </div>
-            <div class="kv" style="flex:1;">
-              <div class="k">BIDDER</div>
-              <div class="v" id="highestBidder">-</div>
-            </div>
+            <div>최고가: <b id="highest-amount">-</b></div>
+            <div>리더: <b id="highest-leader">-</b></div>
           </div>
-        </div>
-      </section>
 
-      <section class="panel">
-        <div class="panel-title">BID</div>
-        <div class="bid-row">
-          <input id="bidInput" type="number" placeholder="입찰 금액" style="flex:1;" />
-          <button id="bidBtn" class="accent">입찰</button>
-        </div>
+          <!-- TIME COUNT + 현재 선수 이름 -->
+          <div class="timer-bar">
+            <div class="timer-left">
+              <span>TIME COUNT</span>
+              <span id="timer-player-name" class="timer-player-name">-</span>
+            </div>
+            <div id="timer">-</div>
+          </div>
 
-        <div class="ops">
-          <button id="btnMainStart" class="warn">본경매 시작</button>
-          <button id="btnFinalize" class="ghost">강제 낙찰/유찰 처리</button>
-          <button id="btnResetAll" class="ghost">전체 리셋</button>
-          <button id="btnResetPoints" class="ghost">포인트 리셋</button>
+          <div class="bid-log" id="bid-log"></div>
         </div>
-      </section>
+      </div>
 
-      <section class="panel">
-        <div class="panel-title">LOG</div>
-        <div id="logBox" class="log"></div>
-      </section>
+      <div class="center-logo-panel">
+        <img src="./assets/logo/cheorwon-esports-logo.png"
+             alt="철원군청 e스포츠 동호회 로고">
+      </div>
     </div>
 
-    <!-- RIGHT -->
-    <div class="right">
-      <section class="panel groups">
-        <div>
-          <div class="panel-title">GROUP A (available)</div>
-          <div id="groupAList" class="group-grid"></div>
+    <!-- RIGHT COLUMN -->
+    <div class="col">
+      <div class="panel roster-panel">
+        <div class="panel-title">
+          <span>그룹별 명단</span>
+          <span class="badge">A / B</span>
         </div>
-        <div>
-          <div class="panel-title">GROUP B (available)</div>
-          <div id="groupBList" class="group-grid"></div>
-        </div>
-      </section>
 
-      <section class="panel">
-        <div class="panel-title">TEAMS</div>
-        <div class="teams">
-          <div class="panel">
-            <div class="team-head">
-              <div style="font-weight:800;">TEAM 1</div>
-              <div id="team1Points" class="team-points">1000 / 1000</div>
-            </div>
-            <div id="team1Roster" class="roster"></div>
+        <div class="roster-grid">
+          <div class="group-box">
+            <div class="group-title">GROUP A <span class="pill">1차</span></div>
+            <div class="avatars" id="roster-A"></div>
           </div>
 
-          <div class="panel">
-            <div class="team-head">
-              <div style="font-weight:800;">TEAM 2</div>
-              <div id="team2Points" class="team-points">1000 / 1000</div>
-            </div>
-            <div id="team2Roster" class="roster"></div>
-          </div>
-
-          <div class="panel">
-            <div class="team-head">
-              <div style="font-weight:800;">TEAM 3</div>
-              <div id="team3Points" class="team-points">1000 / 1000</div>
-            </div>
-            <div id="team3Roster" class="roster"></div>
-          </div>
-
-          <div class="panel">
-            <div class="team-head">
-              <div style="font-weight:800;">TEAM 4</div>
-              <div id="team4Points" class="team-points">1000 / 1000</div>
-            </div>
-            <div id="team4Roster" class="roster"></div>
+          <div class="group-box">
+            <div class="group-title">GROUP B <span class="pill">1차</span></div>
+            <div class="avatars" id="roster-B"></div>
           </div>
         </div>
-      </section>
+      </div>
     </div>
+
   </div>
 
   <script type="module" src="./app.js"></script>
