@@ -90,7 +90,8 @@ let lastOverlayAt = 0;
 //   "./assets/..."나 "/assets/..."는 앞부분 잘라줌.
 //   "player11.png"만 있으면 assets/players/ 를 붙여줌.
 function resolvePhotoUrl(u){
-  const fallback = "assets/players/default.png";
+  const fallback = "assets/players/player01.png";
+
   if (!u) return fallback;
 
   if (/^https?:\/\//i.test(u)) return u;
