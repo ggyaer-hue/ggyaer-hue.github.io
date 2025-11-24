@@ -1,5 +1,5 @@
-// app.js (ROOM1 FINAL, role-independent finalize on timeout)
-// ---------------------------------------------------------
+// app.js (ROOM1 FINAL FIXED: schema-robust + role-independent finalize)
+// -------------------------------------------------------------------
 import { app, db } from "./firebase-config.js";
 import {
   collection, doc, getDocs, onSnapshot, query, orderBy,
@@ -14,7 +14,7 @@ const AUCTION_SECONDS = 15;
 const BID_STEP = 5;
 const TEAM_START_POINTS = 1000;
 const MIN_BID_BY_GROUP = { A: 300, B: 0 };
-const CANON_TEAMS = ["team1","team2","team3","team4"]; // role과 무관한 정규 팀 키
+const CANON_TEAMS = ["team1","team2","team3","team4"]; // 정규 팀 키(역할 무관)
 
 // ====== FIRESTORE REFS ======
 const roomRef    = doc(db, "rooms", ROOM_ID);
@@ -63,7 +63,6 @@ const $ = {
   overlayName: el("auction-overlay-name"),
   overlayPrice: el("auction-overlay-price"),
 
-  // team boxes are fixed to team1~4
   teamBox: {
     team1: el("team-leader1"),
     team2: el("team-leader2"),
@@ -82,7 +81,7 @@ let teams = [];
 let myRole = "viewer";
 let tickTimer = null;
 
-// 타임아웃 중복 호출 방지용
+// timeout 중복 방지
 let timeoutFiredForEndsAt = null;
 
 // ====== HELPERS ======
@@ -94,16 +93,32 @@ const photoOf    = (p)=>p?.photoUrl||p?.photoURL||p?.imageUrl||p?.image||p?.img|
 const isOperator = ()=>myRole==="operator";
 const myTeamId   = ()=>String(myRole).startsWith("leader")?myRole:null;
 
+// ✅ room의 endsAt 필드명/단위가 뭐든 ms로 정규화
+function getEndsAtMs(r){
+  if(!r) return null;
+  let v =
+    r.endsAtMs ??
+    r.endsAt ??
+    r.endsAtS ??
+    r.endsAtSec ??
+    null;
+  if(v == null) return null;
+  const n = Number(v);
+  if(!Number.isFinite(n)) return null;
+  // 1e12보다 작으면 "초 단위"로 보고 ms로 변환
+  return n < 1e12 ? n*1000 : n;
+}
+
 // anyId -> teamN 파싱 (leader/role 무시)
 function canonicalKeyFromAnyId(anyId){
   if(!anyId) return null;
   const s = String(anyId).toLowerCase();
-  const m = s.match(/([1-4])$/);   // leader1, team2, "3" → team3
+  const m = s.match(/([1-4])$/); // leader1/team2/"3" -> team3
   if(m) return `team${m[1]}`;
   return null;
 }
 
-// teams snapshot -> canonical(team1~4) 기준으로 맵 만들기
+// teams snapshot -> canonical(team1~4) 맵
 function buildTeamMaps(){
   const byDocId = new Map();
   const byCanon = new Map();
@@ -111,13 +126,11 @@ function buildTeamMaps(){
   teams.forEach(t=>{
     byDocId.set(t.id, t);
 
-    // 1) orderIndex로 우선 매핑
     const oi = Number(t.orderIndex);
     if(oi>=1 && oi<=4){
       byCanon.set(`team${oi}`, t);
       return;
     }
-    // 2) 문서 id 끝자리 숫자로 매핑
     const c = canonicalKeyFromAnyId(t.id);
     if(c && !byCanon.has(c)) byCanon.set(c, t);
   });
@@ -125,11 +138,9 @@ function buildTeamMaps(){
   return { byDocId, byCanon };
 }
 
-// bidderId가 어떤 문자열이든 -> (canonKey, docId)로 해결
 function resolveBidderToTeam(bidderId){
   const { byDocId, byCanon } = buildTeamMaps();
 
-  // (A) teams doc id로 직접 매칭
   if(byDocId.has(bidderId)){
     const t = byDocId.get(bidderId);
     const oi = Number(t.orderIndex);
@@ -137,7 +148,6 @@ function resolveBidderToTeam(bidderId){
     return { canonKey: canon, docId: t.id };
   }
 
-  // (B) bidderId에서 숫자 파싱
   const parsedCanon = canonicalKeyFromAnyId(bidderId);
   if(parsedCanon){
     const t = byCanon.get(parsedCanon);
@@ -152,10 +162,9 @@ onSnapshot(roomRef, (snap)=>{
   prevRoomState = roomState;
   roomState = snap.exists()?snap.data():null;
 
-  // endsAt이 바뀌면 timeoutFired 리셋
-  if(roomState?.endsAtMs && roomState.endsAtMs !== timeoutFiredForEndsAt){
-    // 새 라운드 시작임
-    timeoutFiredForEndsAt = null;
+  const endsMs = getEndsAtMs(roomState);
+  if(endsMs && endsMs !== timeoutFiredForEndsAt){
+    timeoutFiredForEndsAt = null; // 새 라운드
   }
 
   maybeShowOverlay(prevRoomState, roomState);
@@ -201,7 +210,7 @@ function renderAll(){
 
 function renderTop(){
   if(!roomState) return;
-  const st=roomState.status||"waiting";
+  const st=roomState.status||"running"; // status 없으면 running으로 취급
   if($.statusText){
     $.statusText.textContent = st==="running"?"경매중":st==="finished"?"종료":"대기중";
   }
@@ -209,7 +218,7 @@ function renderTop(){
     $.statusDot.className="dot "+(st==="running"?"bidding":st==="finished"?"finished":"");
   }
   if($.modeBadge){
-    $.modeBadge.textContent=`ROOM1 · REAL · ${roomState.currentGroup||"A"}`;
+    $.modeBadge.textContent=`ROOM1 · REAL · ${roomState.currentGroup||roomState.group||roomState.phase||"A"}`;
   }
 }
 function renderAdminControls(){
@@ -236,14 +245,14 @@ function renderCurrent(){
   text("current-player-group",normGroup(cur?.group)||"-");
   text("current-player-base",cur?.basePrice??0);
   text("current-player-bio",cur?.bio||cur?.intro||"-");
-  text("current-player-status",roomState.status||"-");
+  text("current-player-status",roomState.status||roomState.phase||"-");
 
   if($.curPhoto){
     $.curPhoto.src=photoOf(cur);
     $.curPhoto.alt=cur?.name||"current";
   }
   text("highest-amount",roomState.highestBid??0);
-  text("highest-leader",roomState.highestBidderName||"-");
+  text("highest-leader",roomState.highestBidderName||roomState.highestBidderId||"-");
   if($.timerPlayerName) $.timerPlayerName.textContent=cur?.name||"-";
 }
 
@@ -339,18 +348,19 @@ function renderTeams(){
 function syncTick(){
   if(tickTimer) clearInterval(tickTimer);
   tickTimer=setInterval(()=>{
-    if(!roomState?.endsAtMs){
+    const endsMs = getEndsAtMs(roomState);
+    if(!endsMs){
       if($.timer) $.timer.textContent="-";
       return;
     }
 
-    const leftMs=roomState.endsAtMs-Date.now();
+    const leftMs=endsMs-Date.now();
     const leftSec=Math.max(0,Math.ceil(leftMs/1000));
     if($.timer) $.timer.textContent=leftSec;
 
-    // ✅ 역할 상관없이 타임아웃이면 누구든 finalize 시도
-    if(leftSec<=0 && timeoutFiredForEndsAt !== roomState.endsAtMs){
-      timeoutFiredForEndsAt = roomState.endsAtMs;
+    // ✅ 운영자/관전자 상관없이 타임아웃이면 finalize 시도
+    if(leftSec<=0 && timeoutFiredForEndsAt !== endsMs){
+      timeoutFiredForEndsAt = endsMs;
       finalizeCurrentAuction("timeout").catch(console.error);
     }
   },250);
@@ -369,16 +379,23 @@ function getNextPlayerId(group, excludeId=null){
 async function pickPlayerAsCurrent(pid){
   if(!isOperator()) return;
   const p=players.find(x=>x.id===pid);
+  const g = normGroup(p?.group||"A");
+
   await updateDoc(roomRef,{
     currentPlayerId:pid,
+    currentPlayerId:pid,           // 혹시 쓰는 스키마 대비 중복
+    currentGroup:g,
+    group:g,
+    phase:g,
+
     highestBid:0,
     highestBidderId:null,
     highestBidderName:null,
+
     endsAtMs:Date.now()+AUCTION_SECONDS*1000,
     status:"running",
-    currentGroup:normGroup(p?.group||"A"),
+    finalizing:false,
     announcement:null,
-    finalizing:false
   });
 }
 
@@ -390,10 +407,14 @@ async function startMainAuction(){
   await updateDoc(roomRef,{
     status:"running",
     currentGroup:"A",
+    group:"A",
+    phase:"A",
     currentPlayerId:firstA,
+
     highestBid:0,
     highestBidderId:null,
     highestBidderName:null,
+
     endsAtMs:Date.now()+AUCTION_SECONDS*1000,
     announcement:"본경매 시작!",
     finalizing:false
@@ -402,7 +423,7 @@ async function startMainAuction(){
 
 async function startRemainingAuction(){
   if(!isOperator()) return;
-  let g=roomState?.currentGroup||"A";
+  let g=roomState?.currentGroup||roomState?.group||roomState?.phase||"A";
   let pid=getNextPlayerId(g);
   if(!pid && g==="A"){ g="B"; pid=getNextPlayerId("B"); }
   if(!pid) return alert("남은 선수가 없습니다.");
@@ -410,10 +431,14 @@ async function startRemainingAuction(){
   await updateDoc(roomRef,{
     status:"running",
     currentGroup:g,
+    group:g,
+    phase:g,
     currentPlayerId:pid,
+
     highestBid:0,
     highestBidderId:null,
     highestBidderName:null,
+
     endsAtMs:Date.now()+AUCTION_SECONDS*1000,
     announcement:"잔여 재경매 시작!",
     finalizing:false
@@ -426,8 +451,8 @@ async function finalizeCurrentAuction(reason="sold"){
     if(!roomSnap.exists()) throw new Error("room missing");
     const r=roomSnap.data();
 
-    // 이미 끝났거나 finalizing이면 종료
-    if(r.finalizing || r.status!=="running") return;
+    // ✅ status가 뭐든 상관없이 finalizing만 막음
+    if(r.finalizing) return;
 
     const curId=r.currentPlayerId;
     if(!curId){ tx.update(roomRef,{finalizing:false}); return; }
@@ -454,7 +479,9 @@ async function finalizeCurrentAuction(reason="sold"){
       tx.update(curRef,{
         status:"sold",
         assignedTeamId: assignedId,
-        assignedTeamKey: canonKey, // ✅ team1~4 저장
+        assignedTeamKey: canonKey,   // team1~4 렌더 고정키
+        soldBy: assignedId,          // 기존 스키마 대비
+        soldAtMs: Date.now(),
         finalPrice: highestBid,
         updatedAt: serverTimestamp()
       });
@@ -473,6 +500,8 @@ async function finalizeCurrentAuction(reason="sold"){
         status:"unsold",
         assignedTeamId:null,
         assignedTeamKey:null,
+        soldBy:null,
+        soldAtMs: Date.now(),
         finalPrice:0,
         updatedAt: serverTimestamp()
       });
@@ -490,6 +519,8 @@ async function finalizeCurrentAuction(reason="sold"){
         status:"finished",
         currentPlayerId:null,
         currentGroup:nextGroup,
+        group:nextGroup,
+        phase:nextGroup,
         highestBid:0,
         highestBidderId:null,
         highestBidderName:null,
@@ -503,10 +534,14 @@ async function finalizeCurrentAuction(reason="sold"){
     tx.update(roomRef,{
       status:"running",
       currentGroup:nextGroup,
+      group:nextGroup,
+      phase:nextGroup,
       currentPlayerId:nextId,
+
       highestBid:0,
       highestBidderId:null,
       highestBidderName:null,
+
       endsAtMs:Date.now()+AUCTION_SECONDS*1000,
       finalizing:false,
       announcement: reason==="timeout" ? "유찰 → 다음 선수" : "낙찰 완료!"
@@ -540,7 +575,6 @@ async function placeBid(){
     const highest=r.highestBid??0;
     if(amount<highest+BID_STEP) throw new Error(`최소 ${BID_STEP}점 이상 높여야 함`);
 
-    // 포인트 체크(teams 문서가 있을 때만)
     const { docId } = resolveBidderToTeam(teamId);
     if(docId){
       const teamRef=doc(teamsCol,docId);
@@ -581,10 +615,14 @@ async function resetAll(){
   batch.update(roomRef,{
     status:"waiting",
     currentGroup:"A",
+    group:"A",
+    phase:"A",
     currentPlayerId:null,
+
     highestBid:0,
     highestBidderId:null,
     highestBidderName:null,
+
     endsAtMs:null,
     announcement:"전체 리셋 완료",
     finalizing:false
@@ -596,6 +634,8 @@ async function resetAll(){
       status:"available",
       assignedTeamId:null,
       assignedTeamKey:null,
+      soldBy:null,
+      soldAtMs:null,
       finalPrice:0,
       updatedAt:serverTimestamp()
     });
