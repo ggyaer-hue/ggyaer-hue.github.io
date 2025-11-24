@@ -1,7 +1,8 @@
 // firebase-config.js
-// Firebase 콘솔에서 가져온 설정값 (cwgauction-8ae37 프로젝트)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
-export const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyDldhIELEidJQQck4ljtWznalakpXbAGQA",
   authDomain: "cwgauction-8ae37.firebaseapp.com",
   projectId: "cwgauction-8ae37",
@@ -10,3 +11,7 @@ export const firebaseConfig = {
   appId: "1:44783149326:web:e6321e381f7ffc4864775f",
   measurementId: "G-48GXGZ32CW"
 };
+
+// ✅ named export로 app, db 내보내기
+export const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app);
