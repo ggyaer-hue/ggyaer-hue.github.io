@@ -92,13 +92,23 @@ const PAGE_BASE = location.pathname.endsWith("/")
 function resolvePhotoUrl(u){
   if (!u) return "./assets/players/default.png";
   if (/^https?:\/\//i.test(u)) return u;
-  if (u.startsWith("/")) return u;
-  return PAGE_BASE + u.replace(/^\.\//, "");
+
+  let cleaned = u.toString().trim();
+
+  // ✅ 흔한 오타 자동 보정: players01.png -> player01.png
+  cleaned = cleaned
+    .replace("/assets/players/players", "/assets/players/player")
+    .replace("assets/players/players", "assets/players/player");
+
+  // ✅ GitHub Pages에서는 "/assets/..."가 루트로 가서 404남 → repo 상대경로로 변환
+  if (cleaned.startsWith("/")) cleaned = cleaned.slice(1);
+
+  // "./assets/..."도 정리
+  if (cleaned.startsWith("./")) cleaned = cleaned.slice(2);
+
+  return PAGE_BASE + cleaned;
 }
 
-function normalizeGroup(g){
-  return (g ?? "").toString().trim().toUpperCase(); // "b " -> "B"
-}
 
 function formatLeaderName(id){
   const map = {
