@@ -17,7 +17,7 @@ const MIN_BID_BY_GROUP = { A: 300, B: 0 };
 
 const CANON_TEAMS = ["team1", "team2", "team3", "team4"];
 // ✅ UI에 보일 팀 이름
-const TEAM_DISPLAY_NAMES = ["팀 동찬", "팀 영섭", "팀 윤석", "팀 재섭"];
+const TEAM_DISPLAY_NAMES = ["Team 동찬", "Team 영섭", "Team 윤석", "Team 재섭"];
 const UNSOLD_KEY = "unsold";
 
 // ====== FIRESTORE REFS ======
