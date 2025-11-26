@@ -492,7 +492,7 @@ function renderTeams() {
         <div class="team-points">${remain} / ${TEAM_START_POINTS}</div>
       </div>
       <div class="team-row">
-        ${[0, 1, 2, 3]   /* ✅ 4칸만 사용 */
+        ${[0, 1, 2, 3]   /* ✅ 4칸만 렌더링 */
           .map((i) => {
             const p = list[i];
             if (!p)
@@ -512,6 +512,7 @@ function renderTeams() {
     `;
   });
 }
+
 
 // ====== TIMER ======
 function syncTick() {
