@@ -1,4 +1,4 @@
-// app.js (ROOM1 FINAL: 팀 이름 한글 + UNSOLD 재경매 + pointsByTeam + SFX)
+// app.js (ROOM1 FINAL: Team 동찬.. + UNSOLD 자유입찰 + pointsByTeam + SFX)
 // -----------------------------------------------------------------------
 import { app, db } from "./firebase-config.js";
 import {
@@ -16,7 +16,7 @@ const TEAM_START_POINTS = 1000;
 const MIN_BID_BY_GROUP = { A: 300, B: 0 };
 
 const CANON_TEAMS = ["team1", "team2", "team3", "team4"];
-// ✅ UI에 보일 팀 이름
+// 표시용 팀 이름
 const TEAM_DISPLAY_NAMES = ["Team 동찬", "Team 영섭", "Team 윤석", "Team 재섭"];
 const UNSOLD_KEY = "unsold";
 
@@ -96,6 +96,8 @@ const photoOf    = (p)=>p?.photoUrl||p?.photoURL||p?.imageUrl||p?.image||p?.img|
 
 const isOperator = ()=>myRole==="operator";
 const myTeamId   = ()=>String(myRole).startsWith("leader")?myRole:null;
+
+const isUnsoldAuction = (r)=> (r?.auctionMode === "unsold");
 
 // leader1~4 => team1~4
 function myCanonTeamKey(){
@@ -406,11 +408,9 @@ function renderTeams(){
     const box=$.teamBox[canon];
     if(!box) return;
 
-    const { byCanon } = buildTeamMaps();
-    // 🔹 여기가 핵심: Firestore name 보다 TEAM_DISPLAY_NAMES 를 우선 사용
-    const fallbackName = TEAM_DISPLAY_NAMES[idx] || `TEAM ${idx+1}`;
-    const t = byCanon.get(canon) || {};
-    const displayName = fallbackName;  // Firestore 이름 무시하고 한글로 고정
+    // Firestore 팀 이름 말고, 우리가 정의한 한글 이름 고정 사용
+    const fallbackName = TEAM_DISPLAY_NAMES[idx] || `Team ${idx+1}`;
+    const displayName = fallbackName;
 
     const roster=buckets[canon].sort((a,b)=>numOrder(a.orderIndex)-numOrder(b.orderIndex));
     const remainPts = pointsByTeam[canon] ?? TEAM_START_POINTS;
@@ -478,6 +478,7 @@ async function pickPlayerAsCurrent(pid){
     highestBidderCanonKey:null,
     endsAtMs:Date.now()+AUCTION_SECONDS*1000,
     status:"running", finalizing:false, announcement:null,
+    auctionMode:"normal"
   });
 }
 
@@ -493,11 +494,12 @@ async function startMainAuction(){
     highestBid:0, highestBidderId:null, highestBidderName:null,
     highestBidderCanonKey:null,
     endsAtMs:Date.now()+AUCTION_SECONDS*1000,
-    announcement:"본경매 시작!", finalizing:false
+    announcement:"본경매 시작!", finalizing:false,
+    auctionMode:"normal"
   });
 }
 
-// ✅ 유찰 재경매: rosters.unsold에서 한 명 꺼내서 다시 경매 시작
+// 유찰 재경매: rosters.unsold에서 한 명 꺼내서 다시 경매 시작
 async function startRemainingAuction(){
   if(!isOperator()) return;
   try{
@@ -522,13 +524,12 @@ async function startRemainingAuction(){
       const pData = pSnap.exists() ? pSnap.data() : {};
       const nextGroup = normGroup(pData.group || "A");
 
-      // 상태 다시 available 로 돌려놓기 (표시용)
+      // 상태 다시 available
       tx.update(pRef, {
         status:"available",
         updatedAt: serverTimestamp()
       });
 
-      // 해당 선수는 유찰 리스트에서 제거
       rosters[UNSOLD_KEY] = unsoldList;
 
       tx.update(roomRef,{
@@ -546,7 +547,8 @@ async function startRemainingAuction(){
         endsAtMs:Date.now()+AUCTION_SECONDS*1000,
         announcement:"유찰 재경매 시작!",
         finalizing:false,
-        rosters
+        rosters,
+        auctionMode:"unsold"  // 🔥 유찰 모드
       });
     });
   }catch(e){
@@ -560,7 +562,7 @@ async function safeFinalize(reason){
   catch(e){ console.error("[finalizeFull failed]", e); await finalizeRoomOnly(reason); }
 }
 
-// ✅ 1차: players + room(포인트/roster)
+// 1차: players + room(포인트/roster)
 async function finalizeFull(reason="sold"){
   await runTransaction(db, async (tx)=>{
     const roomSnap=await tx.get(roomRef);
@@ -649,7 +651,8 @@ async function finalizeFull(reason="sold"){
         highestBidderCanonKey:null,
         endsAtMs:null, finalizing:false,
         rosters, pointsByTeam,
-        announcement:"경매 종료"
+        announcement:"경매 종료",
+        auctionMode:"normal"
       });
       return;
     }
@@ -662,12 +665,13 @@ async function finalizeFull(reason="sold"){
       highestBidderCanonKey:null,
       endsAtMs:Date.now()+AUCTION_SECONDS*1000,
       finalizing:false, rosters, pointsByTeam,
-      announcement: reason==="timeout" ? "유찰 → 다음 선수" : "낙찰 완료!"
+      announcement: reason==="timeout" ? "유찰 → 다음 선수" : "낙찰 완료!",
+      auctionMode:"normal"
     });
   });
 }
 
-// ✅ 2차 fallback: room만
+// 2차 fallback: room만
 async function finalizeRoomOnly(reason="sold"){
   await runTransaction(db, async (tx)=>{
     const roomSnap=await tx.get(roomRef);
@@ -725,7 +729,8 @@ async function finalizeRoomOnly(reason="sold"){
         highestBidderCanonKey:null,
         endsAtMs:null, finalizing:false,
         rosters, pointsByTeam,
-        announcement:"경매 종료(ROOM 저장모드)"
+        announcement:"경매 종료(ROOM 저장모드)",
+        auctionMode:"normal"
       });
       return;
     }
@@ -738,7 +743,8 @@ async function finalizeRoomOnly(reason="sold"){
       highestBidderCanonKey:null,
       endsAtMs:Date.now()+AUCTION_SECONDS*1000,
       finalizing:false, rosters, pointsByTeam,
-      announcement: reason==="timeout" ? "유찰 → 다음 선수(ROOM 저장모드)" : "낙찰 완료!(ROOM 저장모드)"
+      announcement: reason==="timeout" ? "유찰 → 다음 선수(ROOM 저장모드)" : "낙찰 완료!(ROOM 저장모드)",
+      auctionMode:"normal"
     });
   });
 }
@@ -746,21 +752,28 @@ async function finalizeRoomOnly(reason="sold"){
 // ====== BID ======
 async function placeBid(){
   try{
-    const amount=Number($.bidAmount?.value);
-    if(!amount||amount<=0) return alert("입찰 금액을 입력해줘.");
-    if(amount%BID_STEP!==0) return alert(`입찰은 ${BID_STEP}점 단위만 가능해.`);
+    // 0포도 허용: NaN/음수만 막기
+    const raw = $.bidAmount?.value;
+    const amount = Number(raw);
+    if(raw === "" || Number.isNaN(amount)){
+      return alert("입찰 금액을 입력해줘.");
+    }
+    if(amount < 0) return alert("0 이상만 입력해줘.");
+    if(amount % BID_STEP !== 0) return alert(`입찰은 ${BID_STEP}점 단위만 가능해.`);
 
     const teamId=myTeamId();
     const canonKey = myCanonTeamKey();
     if(!teamId || !canonKey) return alert("팀장만 입찰 가능.");
 
-    // 👉 현재 선수 그룹 확인 (A인 경우 300 미만 차단)
-    const curId = roomState?.currentPlayerId;
-    const curLocal = players.find(p=>p.id===curId);
-    const g = normGroup(curLocal?.group || roomState?.currentGroup || "A");
-    const minBid = MIN_BID_BY_GROUP[g] ?? 0;
-    if(amount < minBid){
-      return alert(`GROUP ${g}는 최소 ${minBid}점부터 입찰 가능해.`);
+    const unsoldNow = isUnsoldAuction(roomState);
+
+    // 일반 경매일 때만 그룹 최소입찰 사전 체크
+    const curId0 = roomState?.currentPlayerId;
+    const curLocal = players.find(p=>p.id===curId0);
+    const g0 = normGroup(curLocal?.group || roomState?.currentGroup || "A");
+    const minBid0 = unsoldNow ? 0 : (MIN_BID_BY_GROUP[g0] ?? 0);
+    if(!unsoldNow && amount < minBid0){
+      return alert(`GROUP ${g0}는 최소 ${minBid0}점부터 입찰 가능해.`);
     }
 
     playSfx("bid");
@@ -775,12 +788,26 @@ async function placeBid(){
       const curSnap=await tx.get(curRef);
       const cur=curSnap.data();
 
+      const unsoldTx = isUnsoldAuction(r);
+
       const g=normGroup(cur.group);
-      const minBid=MIN_BID_BY_GROUP[g]??0;
-      if(amount<minBid) throw new Error(`GROUP ${g}는 최소 ${minBid}점부터 입찰 가능`);
+      const minBid=unsoldTx ? 0 : (MIN_BID_BY_GROUP[g]??0);
+      if(!unsoldTx && amount<minBid){
+        throw new Error(`GROUP ${g}는 최소 ${minBid}점부터 입찰 가능`);
+      }
 
       const highest=r.highestBid??0;
-      if(amount<highest+BID_STEP) throw new Error(`최소 ${BID_STEP}점 이상 높여야 함`);
+      if(unsoldTx){
+        // 유찰 재경매: 이전 입찰가보다 낮게만 안 되면 OK
+        if(amount < highest){
+          throw new Error("이전 입찰가보다 낮게는 입찰할 수 없습니다.");
+        }
+      }else{
+        // 일반 경매: 최소 +5 규칙 그대로
+        if(amount<highest+BID_STEP){
+          throw new Error(`최소 ${BID_STEP}점 이상 높여야 함`);
+        }
+      }
 
       const pointsByTeam = normalizePointsByTeam(r.pointsByTeam);
       const remain = pointsByTeam[canonKey];
@@ -830,7 +857,8 @@ async function resetAll(){
     announcement:"전체 리셋 완료",
     finalizing:false,
     rosters: { team1:[], team2:[], team3:[], team4:[], unsold:[] },
-    pointsByTeam: { team1:1000, team2:1000, team3:1000, team4:1000 }
+    pointsByTeam: { team1:1000, team2:1000, team3:1000, team4:1000 },
+    auctionMode:"normal"
   });
 
   const pSnap=await getDocs(playersCol);
