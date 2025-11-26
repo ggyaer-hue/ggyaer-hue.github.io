@@ -1,9 +1,22 @@
-// app.js (ROOM1 FINAL: Team 동찬.. + UNSOLD 자유입찰 + pointsByTeam + SFX)
-// -----------------------------------------------------------------------
+// app.js (ROOM1 FINAL)
+// - 팀 이름: Team 동찬 / Team 영섭 / Team 윤석 / Team 재섭
+// - A그룹 최소 300점, B그룹 제한 없음
+// - 유찰 재경매 시 0포도 입찰 가능(단, 이전 입찰보다 낮게는 안 됨)
+// - pointsByTeam(팀별 1000점)으로 포인트 차감 & 제한
+// - 유찰 재경매 버튼 한 번 누르면 UNSOLD 큐 자동 진행
+
 import { app, db } from "./firebase-config.js";
 import {
-  collection, doc, getDocs, onSnapshot, query, orderBy,
-  runTransaction, updateDoc, serverTimestamp, writeBatch
+  collection,
+  doc,
+  getDocs,
+  onSnapshot,
+  query,
+  orderBy,
+  runTransaction,
+  updateDoc,
+  serverTimestamp,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
 console.log("[app.js] loaded OK", app?.name);
@@ -20,15 +33,36 @@ const CANON_TEAMS = ["team1", "team2", "team3", "team4"];
 const TEAM_DISPLAY_NAMES = ["Team 동찬", "Team 영섭", "Team 윤석", "Team 재섭"];
 const UNSOLD_KEY = "unsold";
 
+// 🔹 canonKey( team1~4 ) → Team 동찬/영섭/...
+function displayNameFromCanonKey(canonKey) {
+  if (!canonKey) return null;
+  const m = String(canonKey).match(/([1-4])$/);
+  if (!m) return null;
+  const idx = Number(m[1]) - 1;
+  return TEAM_DISPLAY_NAMES[idx] || null;
+}
+
+// 🔹 teamId( leader1, team3 등 ) → Team 동찬/영섭/...
+function displayNameFromTeamId(teamId) {
+  if (!teamId) return null;
+  const m = String(teamId).match(/([1-4])$/);
+  if (!m) return null;
+  const idx = Number(m[1]) - 1;
+  return TEAM_DISPLAY_NAMES[idx] || null;
+}
+
 // ====== FIRESTORE REFS ======
-const roomRef    = doc(db, "rooms", ROOM_ID);
+const roomRef = doc(db, "rooms", ROOM_ID);
 const playersCol = collection(db, "rooms", ROOM_ID, "players");
-const teamsCol   = collection(db, "rooms", ROOM_ID, "teams");
-const logsCol    = collection(db, "rooms", ROOM_ID, "logs");
+const teamsCol = collection(db, "rooms", ROOM_ID, "teams");
+const logsCol = collection(db, "rooms", ROOM_ID, "logs");
 
 // ====== DOM ======
-const el = (id)=>document.getElementById(id);
-const text = (id,v)=>{ const n=el(id); if(n) n.textContent=v??""; };
+const el = (id) => document.getElementById(id);
+const text = (id, v) => {
+  const n = el(id);
+  if (n) n.textContent = v ?? "";
+};
 
 const $ = {
   roleSelect: el("role-select"),
@@ -70,16 +104,17 @@ const $ = {
     team1: el("team-leader1"),
     team2: el("team-leader2"),
     team3: el("team-leader3"),
-    team4: el("team-leader4"),
+    team4: el("team-leader4")
   },
 
   rosterA: el("roster-A"),
   rosterB: el("roster-B"),
-  rosterU: el("roster-U"),
+  rosterU: el("roster-U")
 };
 
 // ====== STATE ======
-let roomState = null, prevRoomState = null;
+let roomState = null;
+let prevRoomState = null;
 let players = [];
 let teams = [];
 let myRole = "viewer";
@@ -89,64 +124,64 @@ let timeoutFiredForEndsAt = null;
 let lastTickSecond = null;
 
 // ====== HELPERS ======
-const normGroup  = (g)=>String(g||"A").trim().toUpperCase();
-const normStatus = (s)=>String(s||"available").trim().toLowerCase();
-const numOrder   = (v)=>Number.isFinite(Number(v))?Number(v):9999;
-const photoOf    = (p)=>p?.photoUrl||p?.photoURL||p?.imageUrl||p?.image||p?.img||"";
+const normGroup = (g) => String(g || "A").trim().toUpperCase();
+const normStatus = (s) => String(s || "available").trim().toLowerCase();
+const numOrder = (v) => (Number.isFinite(Number(v)) ? Number(v) : 9999);
+const photoOf = (p) =>
+  p?.photoUrl || p?.photoURL || p?.imageUrl || p?.image || p?.img || "";
 
-const isOperator = ()=>myRole==="operator";
-const myTeamId   = ()=>String(myRole).startsWith("leader")?myRole:null;
-
-const isUnsoldAuction = (r)=> (r?.auctionMode === "unsold");
-
-// leader1~4 => team1~4
-function myCanonTeamKey(){
+const isOperator = () => myRole === "operator";
+const myTeamId = () =>
+  String(myRole).startsWith("leader") ? myRole : null;
+const myCanonTeamKey = () => {
   const id = myTeamId();
-  if(!id) return null;
+  if (!id) return null;
   const m = String(id).match(/([1-4])$/);
   return m ? `team${m[1]}` : null;
-}
+};
 
-function getEndsAtMs(r){
-  if(!r) return null;
+const isUnsoldAuction = (r) => r?.auctionMode === "unsold";
+
+function getEndsAtMs(r) {
+  if (!r) return null;
   let v = r.endsAtMs ?? r.endsAt ?? r.endsAtS ?? r.endsAtSec ?? null;
-  if(v == null) return null;
+  if (v == null) return null;
   const n = Number(v);
-  if(!Number.isFinite(n)) return null;
-  return n < 1e12 ? n*1000 : n;
+  if (!Number.isFinite(n)) return null;
+  return n < 1e12 ? n * 1000 : n;
 }
 
-function canonicalKeyFromAnyId(anyId){
-  if(!anyId) return null;
+function canonicalKeyFromAnyId(anyId) {
+  if (!anyId) return null;
   const s = String(anyId).toLowerCase();
   const m = s.match(/([1-4])$/);
-  if(m) return `team${m[1]}`;
+  if (m) return `team${m[1]}`;
   return null;
 }
 
-function buildTeamMaps(){
+function buildTeamMaps() {
   const byDocId = new Map();
   const byCanon = new Map();
 
-  teams.forEach(t=>{
+  teams.forEach((t) => {
     byDocId.set(t.id, t);
 
     const oi = Number(t.orderIndex);
-    if(oi>=1 && oi<=4){
+    if (oi >= 1 && oi <= 4) {
       byCanon.set(`team${oi}`, t);
       return;
     }
     const c = canonicalKeyFromAnyId(t.id);
-    if(c && !byCanon.has(c)) byCanon.set(c, t);
+    if (c && !byCanon.has(c)) byCanon.set(c, t);
   });
 
   return { byDocId, byCanon };
 }
 
 // room.pointsByTeam 안전하게
-function normalizePointsByTeam(pointsByTeam){
-  const p = {...(pointsByTeam||{})};
-  CANON_TEAMS.forEach(k=>{
+function normalizePointsByTeam(pointsByTeam) {
+  const p = { ...(pointsByTeam || {}) };
+  CANON_TEAMS.forEach((k) => {
     const v = Number(p[k]);
     p[k] = Number.isFinite(v) ? v : TEAM_START_POINTS;
   });
@@ -154,37 +189,45 @@ function normalizePointsByTeam(pointsByTeam){
 }
 
 // rosters 기반 제외 집합
-function getExcludedIdsFromRoom(r){
+function getExcludedIdsFromRoom(r) {
   const ro = r?.rosters;
-  if(!ro) return new Set();
+  if (!ro) return new Set();
   const s = new Set();
-  CANON_TEAMS.forEach(k=>{
-    (ro[k]||[]).forEach(x=>{ if(x?.playerId) s.add(x.playerId); });
+  CANON_TEAMS.forEach((k) => {
+    (ro[k] || []).forEach((x) => {
+      if (x?.playerId) s.add(x.playerId);
+    });
   });
-  (ro[UNSOLD_KEY]||[]).forEach(x=>{ if(x?.playerId) s.add(x.playerId); });
+  (ro[UNSOLD_KEY] || []).forEach((x) => {
+    if (x?.playerId) s.add(x.playerId);
+  });
   return s;
 }
 
-function getExcludedIds(){
+function getExcludedIds() {
   const fromRoom = getExcludedIdsFromRoom(roomState);
-  if(fromRoom.size) return fromRoom;
+  if (fromRoom.size) return fromRoom;
 
   const s = new Set();
-  players.forEach(p=>{
+  players.forEach((p) => {
     const st = normStatus(p.status);
-    if(st==="sold" || st==="unsold") s.add(p.id);
+    if (st === "sold" || st === "unsold") s.add(p.id);
   });
   return s;
 }
 
-function getNextPlayerId(group, excludeId=null){
+function getNextPlayerId(group, excludeId = null) {
   const g = normGroup(group);
   const excluded = getExcludedIds();
   const avail = players
-    .filter(p=>p.id!==excludeId)
-    .filter(p=>!excluded.has(p.id))
-    .filter(p=>normStatus(p.status)==="available" && normGroup(p.group)===g)
-    .sort((a,b)=>numOrder(a.orderIndex)-numOrder(b.orderIndex));
+    .filter((p) => p.id !== excludeId)
+    .filter((p) => !excluded.has(p.id))
+    .filter(
+      (p) =>
+        normStatus(p.status) === "available" &&
+        normGroup(p.group) === g
+    )
+    .sort((a, b) => numOrder(a.orderIndex) - numOrder(b.orderIndex));
   return avail[0]?.id || null;
 }
 
@@ -192,49 +235,60 @@ function getNextPlayerId(group, excludeId=null){
 let audioCtx = null;
 const sfx = {
   bid: new Audio("./assets/sfx/bid.mp3"),
-  tick: new Audio("./assets/sfx/tick.mp3"),
+  tick: new Audio("./assets/sfx/tick.mp3")
 };
 sfx.bid.volume = 0.6;
 sfx.tick.volume = 0.25;
 
-function getAC(){
-  if(!audioCtx){
-    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+function getAC() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
   return audioCtx;
 }
-function beep(freq=600, dur=0.08, vol=0.06){
-  try{
-    const ctx=getAC();
-    const osc=ctx.createOscillator();
-    const gain=ctx.createGain();
-    osc.frequency.value=freq;
-    gain.gain.value=vol;
-    osc.connect(gain); gain.connect(ctx.destination);
+function beep(freq = 600, dur = 0.08, vol = 0.06) {
+  try {
+    const ctx = getAC();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = freq;
+    gain.gain.value = vol;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
     osc.start();
-    osc.stop(ctx.currentTime+dur);
-  }catch(e){}
+    osc.stop(ctx.currentTime + dur);
+  } catch (e) {}
 }
-document.addEventListener("pointerdown", ()=>{
-  try{ getAC().resume(); }catch(e){}
-},{once:true});
+document.addEventListener(
+  "pointerdown",
+  () => {
+    try {
+      getAC().resume();
+    } catch (e) {}
+  },
+  { once: true }
+);
 
-function playSfx(name){
+function playSfx(name) {
   const a = sfx[name];
-  if(a){
-    try{ a.currentTime=0; a.play(); return; }catch(e){}
+  if (a) {
+    try {
+      a.currentTime = 0;
+      a.play();
+      return;
+    } catch (e) {}
   }
-  if(name==="tick") beep(440, 0.05, 0.04);
-  if(name==="bid")  beep(700, 0.08, 0.08);
+  if (name === "tick") beep(440, 0.05, 0.04);
+  if (name === "bid") beep(700, 0.08, 0.08);
 }
 
-// ====== LISTENERS ======
-onSnapshot(roomRef, (snap)=>{
+// ====== SNAPSHOT LISTENERS ======
+onSnapshot(roomRef, (snap) => {
   prevRoomState = roomState;
-  roomState = snap.exists()?snap.data():null;
+  roomState = snap.exists() ? snap.data() : null;
 
   const endsMs = getEndsAtMs(roomState);
-  if(endsMs && endsMs !== timeoutFiredForEndsAt){
+  if (endsMs && endsMs !== timeoutFiredForEndsAt) {
     timeoutFiredForEndsAt = null;
     lastTickSecond = null;
   }
@@ -244,35 +298,39 @@ onSnapshot(roomRef, (snap)=>{
   syncTick();
 });
 
-onSnapshot(teamsCol, (snap)=>{
-  teams = snap.docs.map(d=>({id:d.id, ...d.data()}))
-    .sort((a,b)=>numOrder(a.orderIndex)-numOrder(b.orderIndex));
+onSnapshot(teamsCol, (snap) => {
+  teams = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => numOrder(a.orderIndex) - numOrder(b.orderIndex));
   renderTeams();
 });
 
-onSnapshot(playersCol, (snap)=>{
-  players = snap.docs.map(d=>({id:d.id, ...d.data()}))
-    .sort((a,b)=>numOrder(a.orderIndex)-numOrder(b.orderIndex));
+onSnapshot(playersCol, (snap) => {
+  players = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => numOrder(a.orderIndex) - numOrder(b.orderIndex));
   renderGroups();
   renderTeams();
   renderCurrent();
 });
 
-onSnapshot(query(logsCol, orderBy("createdAt","asc")), (snap)=>{
-  if(!$?.bidLog) return;
-  $.bidLog.innerHTML="";
-  snap.docs.forEach(d=>{
-    const x=d.data();
-    const row=document.createElement("div");
-    row.className="item";
-    row.textContent=`${x.teamName||x.teamId} - ${x.playerName} : ${x.amount}점`;
+onSnapshot(query(logsCol, orderBy("createdAt", "asc")), (snap) => {
+  if (!$.bidLog) return;
+  $.bidLog.innerHTML = "";
+  snap.docs.forEach((d) => {
+    const x = d.data();
+    const row = document.createElement("div");
+    row.className = "item";
+    row.textContent = `${x.teamName || x.teamId} - ${
+      x.playerName
+    } : ${x.amount}점`;
     $.bidLog.appendChild(row);
   });
-  $.bidLog.scrollTop=$.bidLog.scrollHeight;
+  $.bidLog.scrollTop = $.bidLog.scrollHeight;
 });
 
 // ====== RENDER ======
-function renderAll(){
+function renderAll() {
   renderTop();
   renderCurrent();
   renderGroups();
@@ -280,104 +338,121 @@ function renderAll(){
   renderAdminControls();
 }
 
-function renderTop(){
-  if(!roomState) return;
+function renderTop() {
+  if (!roomState) return;
   const st = roomState.status || "running";
-  if($.statusText){
-    $.statusText.textContent = st==="running"?"경매중":st==="finished"?"종료":"대기중";
+  if ($.statusText) {
+    $.statusText.textContent =
+      st === "running" ? "경매중" : st === "finished" ? "종료" : "대기중";
   }
-  if($.statusDot){
-    $.statusDot.className="dot "+(st==="running"?"bidding":st==="finished"?"finished":"");
+  if ($.statusDot) {
+    $.statusDot.className =
+      "dot " + (st === "running" ? "bidding" : st === "finished" ? "finished" : "");
   }
-  if($.modeBadge){
-    $.modeBadge.textContent=`ROOM1 · REAL · ${roomState.currentGroup||roomState.group||roomState.phase||"A"}`;
+  if ($.modeBadge) {
+    $.modeBadge.textContent = `ROOM1 · REAL · ${
+      roomState.currentGroup || roomState.group || roomState.phase || "A"
+    }`;
   }
 }
-function renderAdminControls(){
-  if($.adminControls) $.adminControls.style.display=isOperator()?"":"none";
+function renderAdminControls() {
+  if ($.adminControls) $.adminControls.style.display = isOperator() ? "" : "none";
 }
 
-function renderCurrent(){
-  if(!roomState){
-    text("current-player-name","-");
-    text("current-player-role","-");
-    text("current-player-group","-");
-    text("current-player-base","-");
-    text("current-player-bio","-");
-    text("highest-amount","-");
-    text("highest-leader","-");
-    if($.curPhoto) $.curPhoto.src="";
-    if($.timerPlayerName) $.timerPlayerName.textContent="-";
+function renderCurrent() {
+  if (!roomState) {
+    text("current-player-name", "-");
+    text("current-player-role", "-");
+    text("current-player-group", "-");
+    text("current-player-base", "-");
+    text("current-player-bio", "-");
+    text("highest-amount", "-");
+    text("highest-leader", "-");
+    if ($.curPhoto) $.curPhoto.src = "";
+    if ($.timerPlayerName) $.timerPlayerName.textContent = "-";
     return;
   }
-  const cur=players.find(p=>p.id===roomState.currentPlayerId);
-  text("current-player-name",cur?.name||"-");
-  text("current-player-role",cur?.role||"-");
-  text("current-player-group",normGroup(cur?.group)||"-");
-  text("current-player-base",cur?.basePrice??0);
-  text("current-player-bio",cur?.bio||cur?.intro||"-");
-  text("current-player-status",roomState.status||roomState.phase||"-");
-  if($.curPhoto){
-    $.curPhoto.src=photoOf(cur);
-    $.curPhoto.alt=cur?.name||"current";
+  const cur = players.find((p) => p.id === roomState.currentPlayerId);
+  text("current-player-name", cur?.name || "-");
+  text("current-player-role", cur?.role || "-");
+  text("current-player-group", normGroup(cur?.group) || "-");
+  text("current-player-base", cur?.basePrice ?? 0);
+  text("current-player-bio", cur?.bio || cur?.intro || "-");
+  text("current-player-status", roomState.status || roomState.phase || "-");
+  if ($.curPhoto) {
+    $.curPhoto.src = photoOf(cur);
+    $.curPhoto.alt = cur?.name || "current";
   }
-  text("highest-amount",roomState.highestBid??0);
-  text("highest-leader",roomState.highestBidderName||roomState.highestBidderId||"-");
-  if($.timerPlayerName) $.timerPlayerName.textContent=cur?.name||"-";
+  text("highest-amount", roomState.highestBid ?? 0);
+  text(
+    "highest-leader",
+    roomState.highestBidderName || roomState.highestBidderId || "-"
+  );
+  if ($.timerPlayerName) $.timerPlayerName.textContent = cur?.name || "-";
 }
 
-function renderGroups(){
+function renderGroups() {
   const excluded = getExcludedIds();
 
-  if($.rosterA){
-    $.rosterA.innerHTML="";
-    players.filter(p=>normGroup(p.group)==="A")
-      .forEach(p=>$.rosterA.appendChild(avatarItem(p, excluded)));
+  if ($.rosterA) {
+    $.rosterA.innerHTML = "";
+    players
+      .filter((p) => normGroup(p.group) === "A")
+      .forEach((p) => $.rosterA.appendChild(avatarItem(p, excluded)));
   }
-  if($.rosterB){
-    $.rosterB.innerHTML="";
-    players.filter(p=>normGroup(p.group)==="B")
-      .forEach(p=>$.rosterB.appendChild(avatarItem(p, excluded)));
+  if ($.rosterB) {
+    $.rosterB.innerHTML = "";
+    players
+      .filter((p) => normGroup(p.group) === "B")
+      .forEach((p) => $.rosterB.appendChild(avatarItem(p, excluded)));
   }
 
-  if($.rosterU){
-    $.rosterU.innerHTML="";
+  if ($.rosterU) {
+    $.rosterU.innerHTML = "";
     const ro = roomState?.rosters;
-    if(ro && Array.isArray(ro[UNSOLD_KEY])){
-      ro[UNSOLD_KEY].forEach(x=>{
-        $.rosterU.appendChild(avatarItem({
-          id:x.playerId, name:x.name, photoUrl:x.photoUrl
-        }, excluded));
+    if (ro && Array.isArray(ro[UNSOLD_KEY])) {
+      ro[UNSOLD_KEY].forEach((x) => {
+        $.rosterU.appendChild(
+          avatarItem(
+            {
+              id: x.playerId,
+              name: x.name,
+              photoUrl: x.photoUrl
+            },
+            excluded
+          )
+        );
       });
     } else {
-      players.filter(p=>normStatus(p.status)==="unsold")
-        .forEach(p=>$.rosterU.appendChild(avatarItem(p, excluded)));
+      players
+        .filter((p) => normStatus(p.status) === "unsold")
+        .forEach((p) => $.rosterU.appendChild(avatarItem(p, excluded)));
     }
   }
 }
 
-function avatarItem(p, excluded){
-  const wrap=document.createElement("div");
-  wrap.className="avatar";
+function avatarItem(p, excluded) {
+  const wrap = document.createElement("div");
+  wrap.className = "avatar";
 
-  const img=document.createElement("img");
-  img.src=photoOf(p);
+  const img = document.createElement("img");
+  img.src = photoOf(p);
 
-  const name=document.createElement("div");
-  name.className="name-tip";
-  name.textContent=p.name||p.id;
+  const name = document.createElement("div");
+  name.className = "name-tip";
+  name.textContent = p.name || p.id;
 
-  if(roomState?.currentPlayerId===p.id) wrap.classList.add("current");
-  if(excluded.has(p.id)) wrap.classList.add("sold");
+  if (roomState?.currentPlayerId === p.id) wrap.classList.add("current");
+  if (excluded.has(p.id)) wrap.classList.add("sold");
 
   const canon = p.assignedTeamKey || canonicalKeyFromAnyId(p.assignedTeamId);
-  if(canon){
-    const leaderClass = canon.replace("team","leader");
+  if (canon) {
+    const leaderClass = canon.replace("team", "leader");
     wrap.classList.add(`sold-by-${leaderClass}`);
   }
 
-  wrap.addEventListener("click", ()=>{
-    if(!isOperator()) return;
+  wrap.addEventListener("click", () => {
+    if (!isOperator()) return;
     pickPlayerAsCurrent(p.id);
   });
 
@@ -386,137 +461,159 @@ function avatarItem(p, excluded){
   return wrap;
 }
 
-function renderTeams(){
+function renderTeams() {
   const roomRosters = roomState?.rosters || null;
-  const buckets = {team1:[],team2:[],team3:[],team4:[]};
+  const buckets = { team1: [], team2: [], team3: [], team4: [] };
 
-  if(roomRosters){
-    CANON_TEAMS.forEach(k=>{
-      (roomRosters[k]||[]).forEach(x=>buckets[k].push(x));
+  if (roomRosters) {
+    CANON_TEAMS.forEach((k) => {
+      (roomRosters[k] || []).forEach((x) => buckets[k].push(x));
     });
   } else {
-    const soldPlayers=players.filter(p=>normStatus(p.status)==="sold");
-    soldPlayers.forEach(p=>{
-      const canon = p.assignedTeamKey || canonicalKeyFromAnyId(p.assignedTeamId);
-      if(canon && buckets[canon]) buckets[canon].push(p);
+    const soldPlayers = players.filter(
+      (p) => normStatus(p.status) === "sold"
+    );
+    soldPlayers.forEach((p) => {
+      const canon =
+        p.assignedTeamKey || canonicalKeyFromAnyId(p.assignedTeamId);
+      if (canon && buckets[canon]) buckets[canon].push(p);
     });
   }
 
   const pointsByTeam = normalizePointsByTeam(roomState?.pointsByTeam);
 
-  CANON_TEAMS.forEach((canon, idx)=>{
-    const box=$.teamBox[canon];
-    if(!box) return;
+  CANON_TEAMS.forEach((canon, idx) => {
+    const box = $.teamBox[canon];
+    if (!box) return;
 
-    // Firestore 팀 이름 말고, 우리가 정의한 한글 이름 고정 사용
-    const fallbackName = TEAM_DISPLAY_NAMES[idx] || `Team ${idx+1}`;
-    const displayName = fallbackName;
-
-    const roster=buckets[canon].sort((a,b)=>numOrder(a.orderIndex)-numOrder(b.orderIndex));
+    const roster = buckets[canon].sort(
+      (a, b) => numOrder(a.orderIndex) - numOrder(b.orderIndex)
+    );
     const remainPts = pointsByTeam[canon] ?? TEAM_START_POINTS;
 
-    box.innerHTML=`
+    const displayName = TEAM_DISPLAY_NAMES[idx] || `Team ${idx + 1}`;
+
+    box.innerHTML = `
       <div class="team-header">
         <div class="team-name"><span>${displayName}</span></div>
         <div class="team-points">${remainPts} / ${TEAM_START_POINTS}</div>
       </div>
       <div class="team-row">
-        ${[0,1,2,3,4].map((_,i)=>{
-          const p=roster[i];
-          if(!p) return `<div class="slot empty"></div>`;
-          const pp = p.playerId ? p : p;
-          return `
-            <div class="slot">
-              <img src="${photoOf(pp)}" alt="${pp.name||pp.playerId}">
-              <div class="slot-text">
-                <div class="slot-name">${pp.name||pp.playerId}</div>
-                <div class="slot-price">${pp.finalPrice ?? 0}점</div>
+        ${[0, 1, 2, 3, 4]
+          .map((_, i) => {
+            const p = roster[i];
+            if (!p) return `<div class="slot empty"></div>`;
+            const pp = p.playerId ? p : p;
+            return `
+              <div class="slot">
+                <img src="${photoOf(pp)}" alt="${pp.name || pp.playerId}">
+                <div class="slot-text">
+                  <div class="slot-name">${pp.name || pp.playerId}</div>
+                  <div class="slot-price">${pp.finalPrice ?? 0}점</div>
+                </div>
               </div>
-            </div>
-          `;
-        }).join("")}
+            `;
+          })
+          .join("")}
       </div>
     `;
   });
 }
 
 // ====== TIMER ======
-function syncTick(){
-  if(tickTimer) clearInterval(tickTimer);
-  tickTimer=setInterval(()=>{
+function syncTick() {
+  if (tickTimer) clearInterval(tickTimer);
+  tickTimer = setInterval(() => {
     const endsMs = getEndsAtMs(roomState);
-    if(!endsMs){
-      if($.timer) $.timer.textContent="-";
+    if (!endsMs) {
+      if ($.timer) $.timer.textContent = "-";
       return;
     }
-    const leftMs=endsMs-Date.now();
-    const leftSec=Math.max(0,Math.ceil(leftMs/1000));
-    if($.timer) $.timer.textContent=leftSec;
+    const leftMs = endsMs - Date.now();
+    const leftSec = Math.max(0, Math.ceil(leftMs / 1000));
+    if ($.timer) $.timer.textContent = leftSec;
 
-    if(leftSec>0 && leftSec!==lastTickSecond){
-      lastTickSecond=leftSec;
+    if (leftSec > 0 && leftSec !== lastTickSecond) {
+      lastTickSecond = leftSec;
       playSfx("tick");
     }
 
-    if(leftSec<=0 && timeoutFiredForEndsAt !== endsMs){
+    if (
+      leftSec <= 0 &&
+      timeoutFiredForEndsAt !== endsMs &&
+      isOperator()
+    ) {
       timeoutFiredForEndsAt = endsMs;
       safeFinalize("timeout").catch(console.error);
     }
-  },250);
+  }, 250);
 }
 
 // ====== AUCTION FLOW ======
-async function pickPlayerAsCurrent(pid){
-  if(!isOperator()) return;
-  const p=players.find(x=>x.id===pid);
-  const g = normGroup(p?.group||"A");
+async function pickPlayerAsCurrent(pid) {
+  if (!isOperator()) return;
+  const p = players.find((x) => x.id === pid);
+  const g = normGroup(p?.group || "A");
 
-  await updateDoc(roomRef,{
-    currentPlayerId:pid,
-    currentGroup:g, group:g, phase:g,
-    highestBid:0, highestBidderId:null, highestBidderName:null,
-    highestBidderCanonKey:null,
-    endsAtMs:Date.now()+AUCTION_SECONDS*1000,
-    status:"running", finalizing:false, announcement:null,
-    auctionMode:"normal"
+  await updateDoc(roomRef, {
+    currentPlayerId: pid,
+    currentGroup: g,
+    group: g,
+    phase: g,
+    highestBid: 0,
+    highestBidderId: null,
+    highestBidderName: null,
+    highestBidderCanonKey: null,
+    endsAtMs: Date.now() + AUCTION_SECONDS * 1000,
+    status: "running",
+    finalizing: false,
+    announcement: null,
+    auctionMode: "normal"
   });
 }
 
-async function startMainAuction(){
-  if(!isOperator()) return;
-  const firstA=getNextPlayerId("A");
-  if(!firstA) return alert("GROUP A에 남은 선수가 없습니다.");
+async function startMainAuction() {
+  if (!isOperator()) return;
+  const firstA = getNextPlayerId("A");
+  if (!firstA) return alert("GROUP A에 남은 선수가 없습니다.");
 
-  await updateDoc(roomRef,{
-    status:"running",
-    currentGroup:"A", group:"A", phase:"A",
-    currentPlayerId:firstA,
-    highestBid:0, highestBidderId:null, highestBidderName:null,
-    highestBidderCanonKey:null,
-    endsAtMs:Date.now()+AUCTION_SECONDS*1000,
-    announcement:"본경매 시작!", finalizing:false,
-    auctionMode:"normal"
+  await updateDoc(roomRef, {
+    status: "running",
+    currentGroup: "A",
+    group: "A",
+    phase: "A",
+    currentPlayerId: firstA,
+    highestBid: 0,
+    highestBidderId: null,
+    highestBidderName: null,
+    highestBidderCanonKey: null,
+    endsAtMs: Date.now() + AUCTION_SECONDS * 1000,
+    announcement: "본경매 시작!",
+    finalizing: false,
+    auctionMode: "normal"
   });
 }
 
-// 유찰 재경매: rosters.unsold에서 한 명 꺼내서 다시 경매 시작
-async function startRemainingAuction(){
-  if(!isOperator()) return;
-  try{
-    await runTransaction(db, async (tx)=>{
+// 유찰 재경매: UNSOLD 큐에서 하나 꺼내서 시작
+async function startRemainingAuction() {
+  if (!isOperator()) return;
+  try {
+    await runTransaction(db, async (tx) => {
       const roomSnap = await tx.get(roomRef);
-      if(!roomSnap.exists()) throw new Error("room missing");
+      if (!roomSnap.exists()) throw new Error("room missing");
       const r = roomSnap.data();
 
-      const rosters = {...(r.rosters || {})};
-      let unsoldList = Array.isArray(rosters[UNSOLD_KEY]) ? [...rosters[UNSOLD_KEY]] : [];
+      const rosters = { ...(r.rosters || {}) };
+      let unsoldList = Array.isArray(rosters[UNSOLD_KEY])
+        ? [...rosters[UNSOLD_KEY]]
+        : [];
 
-      if(unsoldList.length === 0){
+      if (unsoldList.length === 0) {
         throw new Error("유찰된 선수가 없습니다.");
       }
 
       // 첫 번째 유찰 선수 꺼냄
-      const entry = unsoldList.shift();
+      const entry = unsoldList[0];
       const pid = entry.playerId;
 
       const pRef = doc(playersCol, pid);
@@ -526,78 +623,89 @@ async function startRemainingAuction(){
 
       // 상태 다시 available
       tx.update(pRef, {
-        status:"available",
+        status: "available",
         updatedAt: serverTimestamp()
       });
 
-      rosters[UNSOLD_KEY] = unsoldList;
-
-      tx.update(roomRef,{
-        status:"running",
+      tx.update(roomRef, {
+        status: "running",
         currentPlayerId: pid,
         currentGroup: nextGroup,
         group: nextGroup,
         phase: nextGroup,
 
-        highestBid:0,
-        highestBidderId:null,
-        highestBidderName:null,
-        highestBidderCanonKey:null,
+        highestBid: 0,
+        highestBidderId: null,
+        highestBidderName: null,
+        highestBidderCanonKey: null,
 
-        endsAtMs:Date.now()+AUCTION_SECONDS*1000,
-        announcement:"유찰 재경매 시작!",
-        finalizing:false,
+        endsAtMs: Date.now() + AUCTION_SECONDS * 1000,
+        announcement: "유찰 재경매 시작!",
+        finalizing: false,
         rosters,
-        auctionMode:"unsold"  // 🔥 유찰 모드
+        auctionMode: "unsold" // 🔥 유찰 재경매 모드
       });
     });
-  }catch(e){
+  } catch (e) {
     alert(e.message || "잔여 재경매 시작 실패");
     console.error(e);
   }
 }
 
-async function safeFinalize(reason){
-  try{ await finalizeFull(reason); }
-  catch(e){ console.error("[finalizeFull failed]", e); await finalizeRoomOnly(reason); }
+async function safeFinalize(reason) {
+  try {
+    await finalizeFull(reason);
+  } catch (e) {
+    console.error("[finalizeFull failed]", e);
+    await finalizeRoomOnly(reason);
+  }
 }
 
 // 1차: players + room(포인트/roster)
-async function finalizeFull(reason="sold"){
-  await runTransaction(db, async (tx)=>{
-    const roomSnap=await tx.get(roomRef);
-    if(!roomSnap.exists()) throw new Error("room missing");
-    const r=roomSnap.data();
-    if(r.finalizing) return;
+async function finalizeFull(reason = "sold") {
+  await runTransaction(db, async (tx) => {
+    const roomSnap = await tx.get(roomRef);
+    if (!roomSnap.exists()) throw new Error("room missing");
+    const r = roomSnap.data();
+    if (r.finalizing) return;
 
-    const curId=r.currentPlayerId;
-    if(!curId){ tx.update(roomRef,{finalizing:false}); return; }
+    const isUnsoldMode = r.auctionMode === "unsold";
 
-    const curRef=doc(playersCol,curId);
-    const curSnap=await tx.get(curRef);
-    if(!curSnap.exists()){
-      tx.update(roomRef,{currentPlayerId:null,finalizing:false});
+    const curId = r.currentPlayerId;
+    if (!curId) {
+      tx.update(roomRef, { finalizing: false });
       return;
     }
 
-    const cur=curSnap.data();
-    const curGroup=normGroup(cur.group);
+    const curRef = doc(playersCol, curId);
+    const curSnap = await tx.get(curRef);
+    if (!curSnap.exists()) {
+      tx.update(roomRef, { currentPlayerId: null, finalizing: false });
+      return;
+    }
 
-    const highestBid=r.highestBid??0;
-    const bidderId=r.highestBidderId||null;
-    const canonKey = r.highestBidderCanonKey || canonicalKeyFromAnyId(bidderId);
+    const cur = curSnap.data();
+    const curGroup = normGroup(cur.group);
 
-    const rosters = {...(r.rosters||{})};
-    CANON_TEAMS.forEach(k=>{ if(!Array.isArray(rosters[k])) rosters[k]=[]; });
-    if(!Array.isArray(rosters[UNSOLD_KEY])) rosters[UNSOLD_KEY]=[];
+    const highestBid = r.highestBid ?? 0;
+    const bidderId = r.highestBidderId || null;
+    const canonKey =
+      r.highestBidderCanonKey || canonicalKeyFromAnyId(bidderId);
+
+    const rosters = { ...(r.rosters || {}) };
+    CANON_TEAMS.forEach((k) => {
+      if (!Array.isArray(rosters[k])) rosters[k] = [];
+    });
+    if (!Array.isArray(rosters[UNSOLD_KEY])) rosters[UNSOLD_KEY] = [];
 
     const pointsByTeam = normalizePointsByTeam(r.pointsByTeam);
 
-    tx.update(roomRef,{finalizing:true});
+    tx.update(roomRef, { finalizing: true });
 
-    if(highestBid>0 && bidderId && canonKey){
-      tx.update(curRef,{
-        status:"sold",
+    if (highestBid > 0 && bidderId && canonKey) {
+      // 낙찰
+      tx.update(curRef, {
+        status: "sold",
         assignedTeamId: bidderId,
         assignedTeamKey: canonKey,
         soldBy: bidderId,
@@ -606,307 +714,450 @@ async function finalizeFull(reason="sold"){
         updatedAt: serverTimestamp()
       });
 
-      pointsByTeam[canonKey] = Math.max(0, pointsByTeam[canonKey] - highestBid);
+      pointsByTeam[canonKey] = Math.max(
+        0,
+        pointsByTeam[canonKey] - highestBid
+      );
 
       rosters[canonKey].push({
         playerId: curId,
         name: cur.name || curId,
-        photoUrl: cur.photoUrl || cur.photoURL || cur.imageUrl || "",
+        photoUrl:
+          cur.photoUrl || cur.photoURL || cur.imageUrl || "",
         finalPrice: highestBid,
-        orderIndex: cur.orderIndex ?? rosters[canonKey].length
+        orderIndex:
+          cur.orderIndex ?? rosters[canonKey].length
       });
-    }else{
-      tx.update(curRef,{
-        status:"unsold",
-        assignedTeamId:null,
-        assignedTeamKey:null,
-        soldBy:null,
+
+      // UNSOLD 목록에서 제거
+      rosters[UNSOLD_KEY] = (rosters[UNSOLD_KEY] || []).filter(
+        (x) => x.playerId !== curId
+      );
+    } else {
+      // 유찰 처리
+      tx.update(curRef, {
+        status: "unsold",
+        assignedTeamId: null,
+        assignedTeamKey: null,
+        soldBy: null,
         soldAtMs: Date.now(),
-        finalPrice:0,
+        finalPrice: 0,
         updatedAt: serverTimestamp()
       });
 
-      rosters[UNSOLD_KEY].push({
+      const base = (rosters[UNSOLD_KEY] || []).filter(
+        (x) => x.playerId !== curId
+      );
+      base.push({
         playerId: curId,
         name: cur.name || curId,
-        photoUrl: cur.photoUrl || cur.photoURL || cur.imageUrl || "",
+        photoUrl:
+          cur.photoUrl || cur.photoURL || cur.imageUrl || "",
         finalPrice: 0,
-        orderIndex: cur.orderIndex ?? rosters[UNSOLD_KEY].length
+        orderIndex: cur.orderIndex ?? base.length
       });
+      rosters[UNSOLD_KEY] = base;
     }
 
-    let nextGroup=curGroup;
-    let nextId=getNextPlayerId(nextGroup,curId);
-    if(!nextId && curGroup==="A"){
-      nextGroup="B";
-      nextId=getNextPlayerId("B",curId);
+    let nextId = null;
+    let nextGroup = curGroup;
+    let nextAuctionMode = r.auctionMode || "normal";
+
+    if (isUnsoldMode) {
+      // 유찰 재경매 모드: UNSOLD 목록에서 다음 선수 자동 선택
+      const list = rosters[UNSOLD_KEY] || [];
+      const nextEntry = list.find(
+        (x) => x.playerId && x.playerId !== curId
+      );
+      if (nextEntry) {
+        nextId = nextEntry.playerId;
+
+        const nextRef = doc(playersCol, nextId);
+        const nextSnap = await tx.get(nextRef);
+        const nextData = nextSnap.exists() ? nextSnap.data() : {};
+        nextGroup = normGroup(nextData.group || "A");
+
+        tx.update(nextRef, {
+          status: "available",
+          updatedAt: serverTimestamp()
+        });
+
+        nextAuctionMode = "unsold";
+      } else {
+        // 더 이상 유찰 선수 없음 → 유찰 재경매 끝
+        nextAuctionMode = "normal";
+      }
+    } else {
+      // 일반 A/B 경매 흐름
+      nextGroup = curGroup;
+      nextId = getNextPlayerId(nextGroup, curId);
+      if (!nextId && curGroup === "A") {
+        nextGroup = "B";
+        nextId = getNextPlayerId("B", curId);
+      }
+      nextAuctionMode = "normal";
     }
 
-    if(!nextId){
-      tx.update(roomRef,{
-        status:"finished",
-        currentPlayerId:null,
-        currentGroup:nextGroup, group:nextGroup, phase:nextGroup,
-        highestBid:0, highestBidderId:null, highestBidderName:null,
-        highestBidderCanonKey:null,
-        endsAtMs:null, finalizing:false,
-        rosters, pointsByTeam,
-        announcement:"경매 종료",
-        auctionMode:"normal"
+    if (!nextId) {
+      // 다음 선수 없으면 종료
+      tx.update(roomRef, {
+        status: "finished",
+        currentPlayerId: null,
+        currentGroup: nextGroup,
+        group: nextGroup,
+        phase: nextGroup,
+        highestBid: 0,
+        highestBidderId: null,
+        highestBidderName: null,
+        highestBidderCanonKey: null,
+        endsAtMs: null,
+        finalizing: false,
+        rosters,
+        pointsByTeam,
+        auctionMode: nextAuctionMode,
+        announcement: "경매 종료"
       });
       return;
     }
 
-    tx.update(roomRef,{
-      status:"running",
-      currentGroup:nextGroup, group:nextGroup, phase:nextGroup,
-      currentPlayerId:nextId,
-      highestBid:0, highestBidderId:null, highestBidderName:null,
-      highestBidderCanonKey:null,
-      endsAtMs:Date.now()+AUCTION_SECONDS*1000,
-      finalizing:false, rosters, pointsByTeam,
-      announcement: reason==="timeout" ? "유찰 → 다음 선수" : "낙찰 완료!",
-      auctionMode:"normal"
+    tx.update(roomRef, {
+      status: "running",
+      currentGroup: nextGroup,
+      group: nextGroup,
+      phase: nextGroup,
+      currentPlayerId: nextId,
+      highestBid: 0,
+      highestBidderId: null,
+      highestBidderName: null,
+      highestBidderCanonKey: null,
+      endsAtMs: Date.now() + AUCTION_SECONDS * 1000,
+      finalizing: false,
+      rosters,
+      pointsByTeam,
+      auctionMode: nextAuctionMode,
+      announcement: isUnsoldMode
+        ? reason === "timeout"
+          ? "유찰 재경매 → 다음 선수"
+          : "유찰 재경매 낙찰 완료!"
+        : reason === "timeout"
+        ? "유찰 → 다음 선수"
+        : "낙찰 완료!"
     });
   });
 }
 
-// 2차 fallback: room만
-async function finalizeRoomOnly(reason="sold"){
-  await runTransaction(db, async (tx)=>{
-    const roomSnap=await tx.get(roomRef);
-    if(!roomSnap.exists()) throw new Error("room missing");
-    const r=roomSnap.data();
-    if(r.finalizing) return;
+// 2차 fallback: room만(혹시 위 트랜잭션 실패 대비용)
+async function finalizeRoomOnly(reason = "sold") {
+  await runTransaction(db, async (tx) => {
+    const roomSnap = await tx.get(roomRef);
+    if (!roomSnap.exists()) throw new Error("room missing");
+    const r = roomSnap.data();
+    if (r.finalizing) return;
 
-    const curId=r.currentPlayerId;
-    if(!curId){ tx.update(roomRef,{finalizing:false}); return; }
+    const curId = r.currentPlayerId;
+    if (!curId) {
+      tx.update(roomRef, { finalizing: false });
+      return;
+    }
 
-    const curLocal = players.find(p=>p.id===curId) || {};
-    const curGroup = normGroup(curLocal.group || r.currentGroup || r.group || "A");
+    const curLocal = players.find((p) => p.id === curId) || {};
+    const curGroup = normGroup(
+      curLocal.group || r.currentGroup || r.group || "A"
+    );
 
-    const highestBid=r.highestBid??0;
-    const canonKey = r.highestBidderCanonKey || canonicalKeyFromAnyId(r.highestBidderId);
+    const highestBid = r.highestBid ?? 0;
+    const canonKey =
+      r.highestBidderCanonKey || canonicalKeyFromAnyId(r.highestBidderId);
 
-    const rosters = {...(r.rosters||{})};
-    CANON_TEAMS.forEach(k=>{ if(!Array.isArray(rosters[k])) rosters[k]=[]; });
-    if(!Array.isArray(rosters[UNSOLD_KEY])) rosters[UNSOLD_KEY]=[];
+    const rosters = { ...(r.rosters || {}) };
+    CANON_TEAMS.forEach((k) => {
+      if (!Array.isArray(rosters[k])) rosters[k] = [];
+    });
+    if (!Array.isArray(rosters[UNSOLD_KEY])) rosters[UNSOLD_KEY] = [];
 
     const pointsByTeam = normalizePointsByTeam(r.pointsByTeam);
 
-    tx.update(roomRef,{finalizing:true});
+    tx.update(roomRef, { finalizing: true });
 
-    if(highestBid>0 && canonKey){
+    if (highestBid > 0 && canonKey) {
       rosters[canonKey].push({
-        playerId: curId, name: curLocal.name || curId,
+        playerId: curId,
+        name: curLocal.name || curId,
         photoUrl: photoOf(curLocal),
         finalPrice: highestBid,
-        orderIndex: curLocal.orderIndex ?? rosters[canonKey].length
+        orderIndex:
+          curLocal.orderIndex ?? rosters[canonKey].length
       });
-      pointsByTeam[canonKey] = Math.max(0, pointsByTeam[canonKey] - highestBid);
+      pointsByTeam[canonKey] = Math.max(
+        0,
+        pointsByTeam[canonKey] - highestBid
+      );
     } else {
       rosters[UNSOLD_KEY].push({
-        playerId: curId, name: curLocal.name || curId,
+        playerId: curId,
+        name: curLocal.name || curId,
         photoUrl: photoOf(curLocal),
         finalPrice: 0,
-        orderIndex: curLocal.orderIndex ?? rosters[UNSOLD_KEY].length
+        orderIndex:
+          curLocal.orderIndex ?? rosters[UNSOLD_KEY].length
       });
     }
 
-    let nextGroup=curGroup;
-    let nextId=getNextPlayerId(nextGroup,curId);
-    if(!nextId && curGroup==="A"){
-      nextGroup="B";
-      nextId=getNextPlayerId("B",curId);
+    let nextGroup = curGroup;
+    let nextId = getNextPlayerId(nextGroup, curId);
+    if (!nextId && curGroup === "A") {
+      nextGroup = "B";
+      nextId = getNextPlayerId("B", curId);
     }
 
-    if(!nextId){
-      tx.update(roomRef,{
-        status:"finished",
-        currentPlayerId:null,
-        currentGroup:nextGroup, group:nextGroup, phase:nextGroup,
-        highestBid:0, highestBidderId:null, highestBidderName:null,
-        highestBidderCanonKey:null,
-        endsAtMs:null, finalizing:false,
-        rosters, pointsByTeam,
-        announcement:"경매 종료(ROOM 저장모드)",
-        auctionMode:"normal"
+    if (!nextId) {
+      tx.update(roomRef, {
+        status: "finished",
+        currentPlayerId: null,
+        currentGroup: nextGroup,
+        group: nextGroup,
+        phase: nextGroup,
+        highestBid: 0,
+        highestBidderId: null,
+        highestBidderName: null,
+        highestBidderCanonKey: null,
+        endsAtMs: null,
+        finalizing: false,
+        rosters,
+        pointsByTeam,
+        auctionMode: "normal",
+        announcement: "경매 종료(ROOM 저장모드)"
       });
       return;
     }
 
-    tx.update(roomRef,{
-      status:"running",
-      currentGroup:nextGroup, group:nextGroup, phase:nextGroup,
-      currentPlayerId:nextId,
-      highestBid:0, highestBidderId:null, highestBidderName:null,
-      highestBidderCanonKey:null,
-      endsAtMs:Date.now()+AUCTION_SECONDS*1000,
-      finalizing:false, rosters, pointsByTeam,
-      announcement: reason==="timeout" ? "유찰 → 다음 선수(ROOM 저장모드)" : "낙찰 완료!(ROOM 저장모드)",
-      auctionMode:"normal"
+    tx.update(roomRef, {
+      status: "running",
+      currentGroup: nextGroup,
+      group: nextGroup,
+      phase: nextGroup,
+      currentPlayerId: nextId,
+      highestBid: 0,
+      highestBidderId: null,
+      highestBidderName: null,
+      highestBidderCanonKey: null,
+      endsAtMs: Date.now() + AUCTION_SECONDS * 1000,
+      finalizing: false,
+      rosters,
+      pointsByTeam,
+      auctionMode: "normal",
+      announcement:
+        reason === "timeout"
+          ? "유찰 → 다음 선수(ROOM 저장모드)"
+          : "낙찰 완료!(ROOM 저장모드)"
     });
   });
 }
 
 // ====== BID ======
-async function placeBid(){
-  try{
-    // 0포도 허용: NaN/음수만 막기
+async function placeBid() {
+  try {
     const raw = $.bidAmount?.value;
     const amount = Number(raw);
-    if(raw === "" || Number.isNaN(amount)){
+    if (raw === "" || Number.isNaN(amount)) {
       return alert("입찰 금액을 입력해줘.");
     }
-    if(amount < 0) return alert("0 이상만 입력해줘.");
-    if(amount % BID_STEP !== 0) return alert(`입찰은 ${BID_STEP}점 단위만 가능해.`);
+    if (amount < 0) return alert("0 이상만 입력해줘.");
+    if (amount % BID_STEP !== 0)
+      return alert(`입찰은 ${BID_STEP}점 단위만 가능해.`);
 
-    const teamId=myTeamId();
+    const teamId = myTeamId();
     const canonKey = myCanonTeamKey();
-    if(!teamId || !canonKey) return alert("팀장만 입찰 가능.");
+    if (!teamId || !canonKey) return alert("팀장만 입찰 가능.");
 
     const unsoldNow = isUnsoldAuction(roomState);
 
-    // 일반 경매일 때만 그룹 최소입찰 사전 체크
+    // 일반 경매일 때만 최소 입찰 체크
     const curId0 = roomState?.currentPlayerId;
-    const curLocal = players.find(p=>p.id===curId0);
-    const g0 = normGroup(curLocal?.group || roomState?.currentGroup || "A");
-    const minBid0 = unsoldNow ? 0 : (MIN_BID_BY_GROUP[g0] ?? 0);
-    if(!unsoldNow && amount < minBid0){
-      return alert(`GROUP ${g0}는 최소 ${minBid0}점부터 입찰 가능해.`);
+    const curLocal = players.find((p) => p.id === curId0);
+    const g0 = normGroup(
+      curLocal?.group || roomState?.currentGroup || "A"
+    );
+    const minBid0 = unsoldNow ? 0 : MIN_BID_BY_GROUP[g0] ?? 0;
+    if (!unsoldNow && amount < minBid0) {
+      return alert(
+        `GROUP ${g0}는 최소 ${minBid0}점부터 입찰 가능해.`
+      );
     }
 
     playSfx("bid");
 
-    await runTransaction(db, async (tx)=>{
-      const roomSnap=await tx.get(roomRef);
-      const r=roomSnap.data();
-      const curId=r.currentPlayerId;
-      if(!curId) throw new Error("현재 경매 선수가 없음");
-
-      const curRef=doc(playersCol,curId);
-      const curSnap=await tx.get(curRef);
-      const cur=curSnap.data();
+    await runTransaction(db, async (tx) => {
+      const roomSnap = await tx.get(roomRef);
+      const r = roomSnap.data();
+      const curId = r.currentPlayerId;
+      if (!curId) throw new Error("현재 경매 선수가 없음");
 
       const unsoldTx = isUnsoldAuction(r);
 
-      const g=normGroup(cur.group);
-      const minBid=unsoldTx ? 0 : (MIN_BID_BY_GROUP[g]??0);
-      if(!unsoldTx && amount<minBid){
+      const curRef = doc(playersCol, curId);
+      const curSnap = await tx.get(curRef);
+      const cur = curSnap.data();
+
+      const g = normGroup(cur.group);
+      const minBid = unsoldTx ? 0 : MIN_BID_BY_GROUP[g] ?? 0;
+      if (!unsoldTx && amount < minBid) {
         throw new Error(`GROUP ${g}는 최소 ${minBid}점부터 입찰 가능`);
       }
 
-      const highest=r.highestBid??0;
-      if(unsoldTx){
-        // 유찰 재경매: 이전 입찰가보다 낮게만 안 되면 OK
-        if(amount < highest){
-          throw new Error("이전 입찰가보다 낮게는 입찰할 수 없습니다.");
+      const highest = r.highestBid ?? 0;
+      if (unsoldTx) {
+        // 유찰 재경매: 이전 입찰가보다 낮게만 안 되면 됨
+        if (amount < highest) {
+          throw new Error(
+            "이전 입찰가보다 낮게는 입찰할 수 없습니다."
+          );
         }
-      }else{
-        // 일반 경매: 최소 +5 규칙 그대로
-        if(amount<highest+BID_STEP){
-          throw new Error(`최소 ${BID_STEP}점 이상 높여야 함`);
+      } else {
+        // 일반 경매: 최소 +5
+        if (amount < highest + BID_STEP) {
+          throw new Error(
+            `최소 ${BID_STEP}점 이상 높여야 함`
+          );
         }
       }
 
       const pointsByTeam = normalizePointsByTeam(r.pointsByTeam);
       const remain = pointsByTeam[canonKey];
-      if(amount > remain) throw new Error("잔여 포인트 부족");
+      if (amount > remain) throw new Error("잔여 포인트 부족");
 
-      tx.update(roomRef,{
-        highestBid:amount,
+      const displayName =
+        displayNameFromCanonKey(canonKey) ||
+        displayNameFromTeamId(teamId) ||
+        teamId;
+
+      tx.update(roomRef, {
+        highestBid: amount,
         highestBidderId: teamId,
-        highestBidderName: teamId,
+        highestBidderName: displayName,
         highestBidderCanonKey: canonKey,
-        lastBidAtMs:Date.now(),
+        lastBidAtMs: Date.now(),
         pointsByTeam
       });
 
-      const logRef=doc(logsCol);
-      tx.set(logRef,{
-        createdAt:serverTimestamp(),
-        teamId:teamId,
-        teamName:teamId,
-        playerId:curId,
-        playerName:cur.name||curId,
+      const logRef = doc(logsCol);
+      tx.set(logRef, {
+        createdAt: serverTimestamp(),
+        teamId,
+        teamName: displayName,
+        playerId: curId,
+        playerName: cur.name || curId,
         amount,
-        group:g
+        group: g
       });
     });
 
-    $.bidAmount.value="";
-  }catch(e){
+    $.bidAmount.value = "";
+  } catch (e) {
     alert(e.message || "입찰 실패");
     console.error(e);
   }
 }
 
 // ====== RESET ======
-async function resetAll(){
-  if(!isOperator()) return;
+async function resetAll() {
+  if (!isOperator()) return;
 
-  const batch=writeBatch(db);
+  const batch = writeBatch(db);
 
-  batch.update(roomRef,{
-    status:"waiting",
-    currentGroup:"A", group:"A", phase:"A",
-    currentPlayerId:null,
-    highestBid:0, highestBidderId:null, highestBidderName:null,
-    highestBidderCanonKey:null,
-    endsAtMs:null,
-    announcement:"전체 리셋 완료",
-    finalizing:false,
-    rosters: { team1:[], team2:[], team3:[], team4:[], unsold:[] },
-    pointsByTeam: { team1:1000, team2:1000, team3:1000, team4:1000 },
-    auctionMode:"normal"
+  batch.update(roomRef, {
+    status: "waiting",
+    currentGroup: "A",
+    group: "A",
+    phase: "A",
+    currentPlayerId: null,
+    highestBid: 0,
+    highestBidderId: null,
+    highestBidderName: null,
+    highestBidderCanonKey: null,
+    endsAtMs: null,
+    announcement: "전체 리셋 완료",
+    finalizing: false,
+    rosters: {
+      team1: [],
+      team2: [],
+      team3: [],
+      team4: [],
+      unsold: []
+    },
+    pointsByTeam: {
+      team1: TEAM_START_POINTS,
+      team2: TEAM_START_POINTS,
+      team3: TEAM_START_POINTS,
+      team4: TEAM_START_POINTS
+    },
+    auctionMode: "normal"
   });
 
-  const pSnap=await getDocs(playersCol);
-  pSnap.forEach(d=>{
-    batch.update(d.ref,{
-      status:"available",
-      assignedTeamId:null, assignedTeamKey:null,
-      soldBy:null, soldAtMs:null,
-      finalPrice:0, updatedAt:serverTimestamp()
+  const pSnap = await getDocs(playersCol);
+  pSnap.forEach((d) => {
+    batch.update(d.ref, {
+      status: "available",
+      assignedTeamId: null,
+      assignedTeamKey: null,
+      soldBy: null,
+      soldAtMs: null,
+      finalPrice: 0,
+      updatedAt: serverTimestamp()
     });
   });
 
-  const tSnap=await getDocs(teamsCol);
-  tSnap.forEach(d=>batch.update(d.ref,{pointsRemaining:TEAM_START_POINTS}));
+  const tSnap = await getDocs(teamsCol);
+  tSnap.forEach((d) =>
+    batch.update(d.ref, { pointsRemaining: TEAM_START_POINTS })
+  );
 
   await batch.commit();
 
-  const lSnap=await getDocs(logsCol);
-  const delBatch=writeBatch(db);
-  lSnap.forEach(d=>delBatch.delete(d.ref));
+  const lSnap = await getDocs(logsCol);
+  const delBatch = writeBatch(db);
+  lSnap.forEach((d) => delBatch.delete(d.ref));
   await delBatch.commit();
 }
 
 // ====== OVERLAY ======
-function maybeShowOverlay(prev, cur){
-  if(!prev||!cur) return;
-  if(prev.currentPlayerId && prev.currentPlayerId!==cur.currentPlayerId){
-    const soldPlayer=players.find(p=>p.id===prev.currentPlayerId);
-    if(!soldPlayer) return;
+function maybeShowOverlay(prev, cur) {
+  if (!prev || !cur) return;
+  if (prev.currentPlayerId && prev.currentPlayerId !== cur.currentPlayerId) {
+    const soldPlayer = players.find(
+      (p) => p.id === prev.currentPlayerId
+    );
+    if (!soldPlayer) return;
 
-    const price=prev.highestBid??0;
+    const price = prev.highestBid ?? 0;
     const canonKey = prev.highestBidderCanonKey;
-    const leaderClass = canonKey ? canonKey.replace("team","leader") : null;
-    const teamName=prev.highestBidderName||prev.highestBidderId||"유찰";
+    const leaderClass = canonKey ? canonKey.replace("team", "leader") : null;
+    const teamName =
+      prev.highestBidderName || prev.highestBidderId || "유찰";
 
-    showOverlay({leaderClass, teamName, player:soldPlayer, price, sold:price>0});
+    showOverlay({
+      leaderClass,
+      teamName,
+      player: soldPlayer,
+      price,
+      sold: price > 0
+    });
   }
 }
-function showOverlay({leaderClass, teamName, player, price, sold}){
-  if(!$.overlay) return;
+function showOverlay({ leaderClass, teamName, player, price, sold }) {
+  if (!$.overlay) return;
 
   $.overlayTeam.textContent = sold ? teamName : "유찰";
   $.overlayName.textContent = player?.name || "-";
   $.overlayPrice.textContent = sold ? `${price}점 낙찰` : "유찰";
   $.overlayPhoto.src = photoOf(player);
 
-  $.overlayTeam.style.color = leaderClass ? `var(--c-${leaderClass})` : "#cbd7f7";
-  $.overlayPhoto.style.borderColor = leaderClass ? `var(--c-${leaderClass})` : "#cbd7f7";
+  $.overlayTeam.style.color = leaderClass
+    ? `var(--c-${leaderClass})`
+    : "#cbd7f7";
+  $.overlayPhoto.style.borderColor = leaderClass
+    ? `var(--c-${leaderClass})`
+    : "#cbd7f7";
 
   $.overlay.classList.remove("show");
   void $.overlay.offsetWidth;
@@ -914,25 +1165,30 @@ function showOverlay({leaderClass, teamName, player, price, sold}){
 }
 
 // ====== EVENTS ======
-function bindEvents(){
-  if($.roleSelect){
-    $.roleSelect.addEventListener("change", ()=>{
-      myRole=$.roleSelect.value;
+function bindEvents() {
+  if ($.roleSelect) {
+    $.roleSelect.addEventListener("change", () => {
+      myRole = $.roleSelect.value;
       renderAdminControls();
     });
-    myRole=$.roleSelect.value;
+    myRole = $.roleSelect.value;
   }
 
   $.bidBtn && $.bidBtn.addEventListener("click", placeBid);
-  $.bidAmount && $.bidAmount.addEventListener("keydown",(e)=>{
-    if(e.key==="Enter") placeBid();
-  });
+  $.bidAmount &&
+    $.bidAmount.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") placeBid();
+    });
 
-  $.btnStartReal && $.btnStartReal.addEventListener("click", startMainAuction);
-  $.btnStartTest && $.btnStartTest.addEventListener("click", startMainAuction);
-  $.btnStartRemaining && $.btnStartRemaining.addEventListener("click", startRemainingAuction);
+  $.btnStartReal &&
+    $.btnStartReal.addEventListener("click", startMainAuction);
+  $.btnStartTest &&
+    $.btnStartTest.addEventListener("click", startMainAuction);
+  $.btnStartRemaining &&
+    $.btnStartRemaining.addEventListener("click", startRemainingAuction);
   $.btnReset && $.btnReset.addEventListener("click", resetAll);
 }
 bindEvents();
 
+// 디버그용
 window.__finalize = safeFinalize;
