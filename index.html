@@ -112,17 +112,29 @@
       padding:4px 8px; border-radius:999px; background:var(--panel2);
       border:1px solid var(--line);
     }
-    .team-row{
-      display:grid; grid-template-columns: repeat(4, 1fr); /* ✅ 4칸으로 변경 */
-      gap:8px; flex:1; grid-auto-rows:1fr; align-content:stretch;
-    }
-    .slot{
-      background:var(--panel2);
-      border:1px dashed #2a3660;
-      border-radius:12px;
-      padding:6px; display:flex; flex-direction:column;
-      align-items:center; justify-content:flex-start;
-      min-height:96px; position:relative;
+   .team-row{
+    /* ✅ 여기만 바뀐 부분 */
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);  /* 5 → 4 */
+    gap:8px;
+    flex:1;
+    grid-auto-rows:1fr;
+    align-content:stretch;
+  }
+
+  .slot{
+    background:var(--panel2);
+    border:1px dashed #2a3660;
+    border-radius:12px;
+    padding:6px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-start;
+    min-height:96px;
+    position:relative;
+  }
+
     }
     .slot.empty{ opacity:0.75; }
     .slot img{
@@ -488,3 +500,4 @@
   <script type="module" src="./app.js"></script>
 </body>
 </html>
+
