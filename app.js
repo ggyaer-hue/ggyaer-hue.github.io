@@ -593,33 +593,52 @@ async function startMainAuction() {
 }
 
 // 유찰 재경매: UNSOLD 큐에서 하나 꺼내서 시작
+// 유찰 재경매: 현재 players 상태 기준으로 UNSOLD 큐를 재구성하고, 자동 진행 모드로 진입
 async function startRemainingAuction() {
   if (!isOperator()) return;
+
+  // 1) 클라이언트에서 보고 있는 players 기준으로 "유찰 선수 리스트" 만들기
+  const unsoldFromState = players
+    .filter(p => normStatus(p.status) === "unsold")
+    .sort((a, b) => numOrder(a.orderIndex) - numOrder(b.orderIndex))
+    .map((p, idx) => ({
+      playerId: p.id,
+      name: p.name || p.id,
+      photoUrl: photoOf(p),
+      finalPrice: p.finalPrice ?? 0,
+      orderIndex: numOrder(p.orderIndex ?? idx)
+    }));
+
+  if (unsoldFromState.length === 0) {
+    alert("유찰된 선수가 없습니다.");
+    return;
+  }
+
   try {
     await runTransaction(db, async (tx) => {
       const roomSnap = await tx.get(roomRef);
       if (!roomSnap.exists()) throw new Error("room missing");
       const r = roomSnap.data();
 
+      // 원래 rosters 유지 + UNSOLD 큐만 현재 상태로 재구성
       const rosters = { ...(r.rosters || {}) };
-      let unsoldList = Array.isArray(rosters[UNSOLD_KEY])
-        ? [...rosters[UNSOLD_KEY]]
-        : [];
+      CANON_TEAMS.forEach(k => {
+        if (!Array.isArray(rosters[k])) rosters[k] = [];
+      });
 
-      if (unsoldList.length === 0) {
-        throw new Error("유찰된 선수가 없습니다.");
-      }
+      // 🔥 지금 화면 기준 유찰 리스트를 통째로 room.rosters.unsold 에 넣는다
+      rosters[UNSOLD_KEY] = unsoldFromState;
 
-      // 첫 번째 유찰 선수 (큐는 finalize 시점에서 정리됨)
-      const entry = unsoldList[0];
-      const pid = entry.playerId;
+      // 큐의 첫 번째 선수부터 재경매 시작
+      const first = rosters[UNSOLD_KEY][0];
+      const pid = first.playerId;
 
-      const pRef = doc(playersCol, pid);
+      const pRef  = doc(playersCol, pid);
       const pSnap = await tx.get(pRef);
       const pData = pSnap.exists() ? pSnap.data() : {};
       const nextGroup = normGroup(pData.group || "A");
 
-      // 상태 다시 available
+      // 상태를 다시 available 로
       tx.update(pRef, {
         status: "available",
         updatedAt: serverTimestamp()
@@ -641,21 +660,12 @@ async function startRemainingAuction() {
         announcement: "유찰 재경매 시작!",
         finalizing: false,
         rosters,
-        auctionMode: "unsold" // 🔥 유찰 재경매 모드
+        auctionMode: "unsold"   // 👈 여기서부터 finalizeFull이 UNSOLD 큐를 자동으로 돈다
       });
     });
   } catch (e) {
     alert(e.message || "잔여 재경매 시작 실패");
     console.error(e);
-  }
-}
-
-async function safeFinalize(reason) {
-  try {
-    await finalizeFull(reason);
-  } catch (e) {
-    console.error("[finalizeFull failed]", e);
-    await finalizeRoomOnly(reason);
   }
 }
 
