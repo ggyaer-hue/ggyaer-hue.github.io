@@ -4,6 +4,7 @@
 // - 유찰 재경매 시 0포도 입찰 가능(단, 이전 입찰보다 낮게는 안 됨)
 // - pointsByTeam(팀별 1000점)으로 포인트 차감 & 제한
 // - 유찰 재경매 버튼 한 번 누르면 UNSOLD 큐 자동 진행
+// - 🔥 타이머 0초 되면 역할 상관없이 자동 finalize
 
 import { app, db } from "./firebase-config.js";
 import {
@@ -538,11 +539,8 @@ function syncTick() {
       playSfx("tick");
     }
 
-    if (
-      leftSec <= 0 &&
-      timeoutFiredForEndsAt !== endsMs &&
-      isOperator()
-    ) {
+    // 🔥 역할 상관없이 타이머 0초 되면 finalize 실행
+    if (leftSec <= 0 && timeoutFiredForEndsAt !== endsMs) {
       timeoutFiredForEndsAt = endsMs;
       safeFinalize("timeout").catch(console.error);
     }
@@ -612,7 +610,7 @@ async function startRemainingAuction() {
         throw new Error("유찰된 선수가 없습니다.");
       }
 
-      // 첫 번째 유찰 선수 꺼냄
+      // 첫 번째 유찰 선수 (큐는 finalize 시점에서 정리됨)
       const entry = unsoldList[0];
       const pid = entry.playerId;
 
@@ -978,7 +976,7 @@ async function placeBid() {
     const g0 = normGroup(
       curLocal?.group || roomState?.currentGroup || "A"
     );
-    const minBid0 = unsoldNow ? 0 : MIN_BID_BY_GROUP[g0] ?? 0;
+    const minBid0 = unsoldNow ? 0 : (MIN_BID_BY_GROUP[g0] ?? 0);
     if (!unsoldNow && amount < minBid0) {
       return alert(
         `GROUP ${g0}는 최소 ${minBid0}점부터 입찰 가능해.`
@@ -1000,7 +998,7 @@ async function placeBid() {
       const cur = curSnap.data();
 
       const g = normGroup(cur.group);
-      const minBid = unsoldTx ? 0 : MIN_BID_BY_GROUP[g] ?? 0;
+      const minBid = unsoldTx ? 0 : (MIN_BID_BY_GROUP[g] ?? 0);
       if (!unsoldTx && amount < minBid) {
         throw new Error(`GROUP ${g}는 최소 ${minBid}점부터 입찰 가능`);
       }
