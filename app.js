@@ -407,9 +407,10 @@ function renderTeams(){
     if(!box) return;
 
     const { byCanon } = buildTeamMaps();
+    // 🔹 여기가 핵심: Firestore name 보다 TEAM_DISPLAY_NAMES 를 우선 사용
     const fallbackName = TEAM_DISPLAY_NAMES[idx] || `TEAM ${idx+1}`;
-    const t = byCanon.get(canon) || { name: fallbackName };
-    const displayName = t.name || fallbackName;
+    const t = byCanon.get(canon) || {};
+    const displayName = fallbackName;  // Firestore 이름 무시하고 한글로 고정
 
     const roster=buckets[canon].sort((a,b)=>numOrder(a.orderIndex)-numOrder(b.orderIndex));
     const remainPts = pointsByTeam[canon] ?? TEAM_START_POINTS;
