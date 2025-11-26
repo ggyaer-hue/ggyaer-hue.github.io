@@ -1,9 +1,9 @@
-// app.js (ROOM1 최종 정리본)
+// app.js (ROOM1 최종 + 팀 슬롯 4칸)
 //
 // - 그룹 A: 최소 300점, B: 제한 없음
 // - 입찰 단위: 5점
 // - 팀 포인트: 팀별 1000점 / 초과 입찰 불가 / 낙찰 시 차감
-// - 유찰되면 "유찰 그룹"으로 이동
+// - 유찰되면 "유찰 그룹"으로 이동 (roster-U)
 // - "잔여 재경매" 한 번 누르면 유찰 큐 끝까지 자동 진행
 // - 타이머 0초 되면 역할 상관없이 자동 finalize
 // - 팀 이름: Team 동찬 / Team 영섭 / Team 윤석 / Team 재섭
@@ -36,11 +36,10 @@ const CANON_TEAMS = ["team1", "team2", "team3", "team4"];
 const TEAM_DISPLAY_NAMES = ["Team 동찬", "Team 영섭", "Team 윤석", "Team 재섭"];
 const UNSOLD_KEY = "unsold";
 
-// ====== SMALL HELPERS ======
+// ====== HELPERS ======
 const normGroup = (g) => String(g || "A").trim().toUpperCase();
 const normStatus = (s) => String(s || "available").trim().toLowerCase();
-const numOrder = (v) =>
-  Number.isFinite(Number(v)) ? Number(v) : 9999;
+const numOrder = (v) => (Number.isFinite(Number(v)) ? Number(v) : 9999);
 const photoOf = (p) =>
   p?.photoUrl || p?.photoURL || p?.imageUrl || p?.image || p?.img || "";
 
@@ -144,7 +143,7 @@ const $ = {
 
   rosterA: el("roster-A"),
   rosterB: el("roster-B"),
-  rosterU: el("roster-U") // 유찰 그룹 (없어도 에러 안 나게 처리)
+  rosterU: el("roster-U")
 };
 
 // ====== FIRESTORE REFS ======
@@ -377,7 +376,6 @@ function renderCurrent() {
 }
 
 function renderGroups() {
-  // A / B 그룹 (오른쪽)
   if ($.rosterA) {
     $.rosterA.innerHTML = "";
     players
@@ -399,7 +397,6 @@ function renderGroups() {
       );
   }
 
-  // 유찰 그룹 (있으면 표시)
   if ($.rosterU) {
     $.rosterU.innerHTML = "";
     const ro = roomState?.rosters;
@@ -458,7 +455,6 @@ function avatarItem(p) {
     );
   }
 
-  // 운영자는 오른쪽에서 클릭하면 현재 선수로 지정 가능
   wrap.addEventListener("click", () => {
     if (!isOperator()) return;
     pickPlayerAsCurrent(p.id);
@@ -487,7 +483,6 @@ function renderTeams() {
       );
 
     const remain = pointsByTeam[canon];
-
     const displayName =
       TEAM_DISPLAY_NAMES[idx] || `Team ${idx + 1}`;
 
@@ -497,7 +492,7 @@ function renderTeams() {
         <div class="team-points">${remain} / ${TEAM_START_POINTS}</div>
       </div>
       <div class="team-row">
-        ${[0, 1, 2, 3, 4]
+        ${[0, 1, 2, 3]   /* ✅ 4칸만 사용 */
           .map((i) => {
             const p = list[i];
             if (!p)
@@ -539,7 +534,6 @@ function syncTick() {
       playSfx("tick");
     }
 
-    // 🔥 역할 상관없이 타이머 0초 되면 finalize
     if (
       leftSec <= 0 &&
       timeoutFiredForEndsAt !== endsMs
@@ -631,7 +625,6 @@ async function pickPlayerAsCurrent(pid) {
 async function startMainAuction() {
   if (!isOperator()) return;
 
-  // 현재 players 상태 기준으로 GROUP A에서 첫 번째 available 찾기
   const first = players
     .filter(
       (p) =>
@@ -666,7 +659,6 @@ async function startMainAuction() {
   });
 }
 
-// 🔥 잔여 재경매: 현재 players에서 status === "unsold"인 애들로 큐 구성 후, 첫 번째부터 시작
 async function startRemainingAuction() {
   if (!isOperator()) return;
 
@@ -707,7 +699,6 @@ async function startRemainingAuction() {
         if (!Array.isArray(rosters[k]))
           rosters[k] = [];
       });
-      // 유찰 큐 최신 상태로 재구성
       rosters[UNSOLD_KEY] = unsoldFromState;
 
       const first = rosters[UNSOLD_KEY][0];
@@ -720,7 +711,6 @@ async function startRemainingAuction() {
         : {};
       const g = normGroup(pData.group || "A");
 
-      // 상태 다시 available로
       tx.update(pRef, {
         status: "available",
         updatedAt: serverTimestamp()
@@ -816,7 +806,6 @@ async function finalizeFull(reason = "sold") {
       r.auctionMode === "unsold";
 
     if (highestBid > 0 && bidderId && canonKey) {
-      // 🔹 낙찰
       tx.update(curRef, {
         status: "sold",
         assignedTeamId: bidderId,
@@ -832,7 +821,6 @@ async function finalizeFull(reason = "sold") {
         pointsByTeam[canonKey] - highestBid
       );
 
-      // 팀 로스터에 중복 넣지 않도록 필터 후 push
       rosters[canonKey] = rosters[canonKey].filter(
         (x) => x.playerId !== curId
       );
@@ -846,12 +834,10 @@ async function finalizeFull(reason = "sold") {
           rosters[canonKey].length
       });
 
-      // 유찰 로스터에서 제거
       rosters[UNSOLD_KEY] = rosters[UNSOLD_KEY].filter(
         (x) => x.playerId !== curId
       );
     } else {
-      // 🔹 유찰
       tx.update(curRef, {
         status: "unsold",
         assignedTeamId: null,
@@ -883,7 +869,6 @@ async function finalizeFull(reason = "sold") {
       r.auctionMode || "normal";
 
     if (isUnsoldMode) {
-      // 🔹 유찰 재경매 모드: UNSOLD 큐에서 다음 선수 자동 선택
       nextId = computeNextUnsold(
         rosters,
         curId
@@ -910,7 +895,6 @@ async function finalizeFull(reason = "sold") {
         nextAuctionMode = "normal";
       }
     } else {
-      // 🔹 일반 A/B 경매
       const res = computeNextNormal(
         curId,
         curGroup
@@ -921,7 +905,6 @@ async function finalizeFull(reason = "sold") {
     }
 
     if (!nextId) {
-      // 다음 선수가 없으면 종료
       tx.update(roomRef, {
         status: "finished",
         currentPlayerId: null,
@@ -969,7 +952,6 @@ async function finalizeFull(reason = "sold") {
   });
 }
 
-// fallback: 문제 생기면 그냥 room만 마무리
 async function finalizeRoomOnly(
   reason = "sold"
 ) {
@@ -1115,7 +1097,6 @@ async function placeBid() {
 
     const unsoldNow = isUnsoldAuction(roomState);
 
-    // 일반 경매일 때만 최소 입찰 체크
     const curId0 = roomState?.currentPlayerId;
     const curLocal = players.find(
       (p) => p.id === curId0
@@ -1161,14 +1142,12 @@ async function placeBid() {
 
       const highest = r.highestBid ?? 0;
       if (unsoldTx) {
-        // 유찰 재경매: 이전 입찰보다만 낮지 않으면 OK
         if (amount < highest) {
           throw new Error(
             "이전 입찰가보다 낮게는 입찰할 수 없습니다."
           );
         }
       } else {
-        // 일반: 최소 +5
         if (amount < highest + BID_STEP) {
           throw new Error(
             `최소 ${BID_STEP}점 이상 높여야 함`
@@ -1265,7 +1244,6 @@ async function resetAll() {
 
   await batch.commit();
 
-  // 로그 초기화
   const lSnap = await getDocs(logsCol);
   const delBatch = writeBatch(db);
   lSnap.forEach((d) =>
@@ -1274,7 +1252,7 @@ async function resetAll() {
   await delBatch.commit();
 }
 
-// ====== OVERLAY (낙찰/유찰 연출) ======
+// ====== OVERLAY ======
 function maybeShowOverlay(prev, cur) {
   if (!prev || !cur) return;
   if (
