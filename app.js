@@ -1,5 +1,5 @@
-// app.js (ROOM1 FINAL: UNSOLD + SFX + pointsByTeam authoritative)
-// --------------------------------------------------------------
+// app.js (ROOM1 FINAL: 팀 이름 한글 + UNSOLD 재경매 + pointsByTeam + SFX)
+// -----------------------------------------------------------------------
 import { app, db } from "./firebase-config.js";
 import {
   collection, doc, getDocs, onSnapshot, query, orderBy,
@@ -15,7 +15,9 @@ const BID_STEP = 5;
 const TEAM_START_POINTS = 1000;
 const MIN_BID_BY_GROUP = { A: 300, B: 0 };
 
-const CANON_TEAMS = ["team1","team2","team3","team4"];
+const CANON_TEAMS = ["team1", "team2", "team3", "team4"];
+// ✅ UI에 보일 팀 이름
+const TEAM_DISPLAY_NAMES = ["팀 동찬", "팀 영섭", "팀 윤석", "팀 재섭"];
 const UNSOLD_KEY = "unsold";
 
 // ====== FIRESTORE REFS ======
@@ -95,7 +97,7 @@ const photoOf    = (p)=>p?.photoUrl||p?.photoURL||p?.imageUrl||p?.image||p?.img|
 const isOperator = ()=>myRole==="operator";
 const myTeamId   = ()=>String(myRole).startsWith("leader")?myRole:null;
 
-// leader1~4 => team1~4 로 canonical key 만들기
+// leader1~4 => team1~4
 function myCanonTeamKey(){
   const id = myTeamId();
   if(!id) return null;
@@ -139,7 +141,7 @@ function buildTeamMaps(){
   return { byDocId, byCanon };
 }
 
-// room.pointsByTeam 안전하게 만들기
+// room.pointsByTeam 안전하게
 function normalizePointsByTeam(pointsByTeam){
   const p = {...(pointsByTeam||{})};
   CANON_TEAMS.forEach(k=>{
@@ -149,7 +151,7 @@ function normalizePointsByTeam(pointsByTeam){
   return p;
 }
 
-// ✅ room.rosters 기반 제외 집합
+// rosters 기반 제외 집합
 function getExcludedIdsFromRoom(r){
   const ro = r?.rosters;
   if(!ro) return new Set();
@@ -292,6 +294,7 @@ function renderTop(){
 function renderAdminControls(){
   if($.adminControls) $.adminControls.style.display=isOperator()?"":"none";
 }
+
 function renderCurrent(){
   if(!roomState){
     text("current-player-name","-");
@@ -404,15 +407,16 @@ function renderTeams(){
     if(!box) return;
 
     const { byCanon } = buildTeamMaps();
-    const t = byCanon.get(canon) || { name:`TEAM ${idx+1}` };
+    const fallbackName = TEAM_DISPLAY_NAMES[idx] || `TEAM ${idx+1}`;
+    const t = byCanon.get(canon) || { name: fallbackName };
+    const displayName = t.name || fallbackName;
 
     const roster=buckets[canon].sort((a,b)=>numOrder(a.orderIndex)-numOrder(b.orderIndex));
-
     const remainPts = pointsByTeam[canon] ?? TEAM_START_POINTS;
 
     box.innerHTML=`
       <div class="team-header">
-        <div class="team-name"><span>${t.name||`TEAM ${idx+1}`}</span></div>
+        <div class="team-name"><span>${displayName}</span></div>
         <div class="team-points">${remainPts} / ${TEAM_START_POINTS}</div>
       </div>
       <div class="team-row">
@@ -492,22 +496,62 @@ async function startMainAuction(){
   });
 }
 
+// ✅ 유찰 재경매: rosters.unsold에서 한 명 꺼내서 다시 경매 시작
 async function startRemainingAuction(){
   if(!isOperator()) return;
-  let g=roomState?.currentGroup||roomState?.group||roomState?.phase||"A";
-  let pid=getNextPlayerId(g);
-  if(!pid && g==="A"){ g="B"; pid=getNextPlayerId("B"); }
-  if(!pid) return alert("남은 선수가 없습니다.");
+  try{
+    await runTransaction(db, async (tx)=>{
+      const roomSnap = await tx.get(roomRef);
+      if(!roomSnap.exists()) throw new Error("room missing");
+      const r = roomSnap.data();
 
-  await updateDoc(roomRef,{
-    status:"running",
-    currentGroup:g, group:g, phase:g,
-    currentPlayerId:pid,
-    highestBid:0, highestBidderId:null, highestBidderName:null,
-    highestBidderCanonKey:null,
-    endsAtMs:Date.now()+AUCTION_SECONDS*1000,
-    announcement:"잔여 재경매 시작!", finalizing:false
-  });
+      const rosters = {...(r.rosters || {})};
+      let unsoldList = Array.isArray(rosters[UNSOLD_KEY]) ? [...rosters[UNSOLD_KEY]] : [];
+
+      if(unsoldList.length === 0){
+        throw new Error("유찰된 선수가 없습니다.");
+      }
+
+      // 첫 번째 유찰 선수 꺼냄
+      const entry = unsoldList.shift();
+      const pid = entry.playerId;
+
+      const pRef = doc(playersCol, pid);
+      const pSnap = await tx.get(pRef);
+      const pData = pSnap.exists() ? pSnap.data() : {};
+      const nextGroup = normGroup(pData.group || "A");
+
+      // 상태 다시 available 로 돌려놓기 (표시용)
+      tx.update(pRef, {
+        status:"available",
+        updatedAt: serverTimestamp()
+      });
+
+      // 해당 선수는 유찰 리스트에서 제거
+      rosters[UNSOLD_KEY] = unsoldList;
+
+      tx.update(roomRef,{
+        status:"running",
+        currentPlayerId: pid,
+        currentGroup: nextGroup,
+        group: nextGroup,
+        phase: nextGroup,
+
+        highestBid:0,
+        highestBidderId:null,
+        highestBidderName:null,
+        highestBidderCanonKey:null,
+
+        endsAtMs:Date.now()+AUCTION_SECONDS*1000,
+        announcement:"유찰 재경매 시작!",
+        finalizing:false,
+        rosters
+      });
+    });
+  }catch(e){
+    alert(e.message || "잔여 재경매 시작 실패");
+    console.error(e);
+  }
 }
 
 async function safeFinalize(reason){
@@ -515,7 +559,7 @@ async function safeFinalize(reason){
   catch(e){ console.error("[finalizeFull failed]", e); await finalizeRoomOnly(reason); }
 }
 
-// ✅ 1차: players/room(포인트/roster) 업데이트
+// ✅ 1차: players + room(포인트/roster)
 async function finalizeFull(reason="sold"){
   await runTransaction(db, async (tx)=>{
     const roomSnap=await tx.get(roomRef);
@@ -540,18 +584,15 @@ async function finalizeFull(reason="sold"){
     const bidderId=r.highestBidderId||null;
     const canonKey = r.highestBidderCanonKey || canonicalKeyFromAnyId(bidderId);
 
-    // rosters 준비
     const rosters = {...(r.rosters||{})};
     CANON_TEAMS.forEach(k=>{ if(!Array.isArray(rosters[k])) rosters[k]=[]; });
     if(!Array.isArray(rosters[UNSOLD_KEY])) rosters[UNSOLD_KEY]=[];
 
-    // pointsByTeam 준비
     const pointsByTeam = normalizePointsByTeam(r.pointsByTeam);
 
     tx.update(roomRef,{finalizing:true});
 
     if(highestBid>0 && bidderId && canonKey){
-      // ✅ 선수 sold 처리
       tx.update(curRef,{
         status:"sold",
         assignedTeamId: bidderId,
@@ -562,7 +603,6 @@ async function finalizeFull(reason="sold"){
         updatedAt: serverTimestamp()
       });
 
-      // ✅ room.pointsByTeam 차감 (권위 데이터)
       pointsByTeam[canonKey] = Math.max(0, pointsByTeam[canonKey] - highestBid);
 
       rosters[canonKey].push({
@@ -626,7 +666,7 @@ async function finalizeFull(reason="sold"){
   });
 }
 
-// ✅ 2차 fallback: room만 업데이트
+// ✅ 2차 fallback: room만
 async function finalizeRoomOnly(reason="sold"){
   await runTransaction(db, async (tx)=>{
     const roomSnap=await tx.get(roomRef);
@@ -713,7 +753,7 @@ async function placeBid(){
     const canonKey = myCanonTeamKey();
     if(!teamId || !canonKey) return alert("팀장만 입찰 가능.");
 
-    // ✅ A그룹 300 미만 즉시 경고
+    // 👉 현재 선수 그룹 확인 (A인 경우 300 미만 차단)
     const curId = roomState?.currentPlayerId;
     const curLocal = players.find(p=>p.id===curId);
     const g = normGroup(curLocal?.group || roomState?.currentGroup || "A");
@@ -741,12 +781,10 @@ async function placeBid(){
       const highest=r.highestBid??0;
       if(amount<highest+BID_STEP) throw new Error(`최소 ${BID_STEP}점 이상 높여야 함`);
 
-      // ✅ pointsByTeam에서 잔여 포인트 체크 (권위 데이터)
       const pointsByTeam = normalizePointsByTeam(r.pointsByTeam);
       const remain = pointsByTeam[canonKey];
       if(amount > remain) throw new Error("잔여 포인트 부족");
 
-      // pointsByTeam이 없던 방이면 여기서 한 번 seeded 저장됨
       tx.update(roomRef,{
         highestBid:amount,
         highestBidderId: teamId,
@@ -804,7 +842,6 @@ async function resetAll(){
     });
   });
 
-  // teams 컬렉션 포인트도 같이 리셋해주고 싶다면 유지
   const tSnap=await getDocs(teamsCol);
   tSnap.forEach(d=>batch.update(d.ref,{pointsRemaining:TEAM_START_POINTS}));
 
