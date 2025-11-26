@@ -113,7 +113,7 @@
       border:1px solid var(--line);
     }
     .team-row{
-      display:grid; grid-template-columns: repeat(5, 1fr);
+      display:grid; grid-template-columns: repeat(4, 1fr); /* ✅ 4칸으로 변경 */
       gap:8px; flex:1; grid-auto-rows:1fr; align-content:stretch;
     }
     .slot{
@@ -137,19 +137,11 @@
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
     .slot-price{ font-size:11px; color:var(--muted); margin-top:2px; }
-    .slot-label{
-      position:absolute; top:6px; left:6px;
-      font-size:10px; color:#9fb0d9; background:#0c1226;
-      padding:2px 6px; border-radius:999px; border:1px solid var(--line);
-    }
 
     .team-leader1{ --team-color: var(--c-leader1); }
     .team-leader2{ --team-color: var(--c-leader2); }
     .team-leader3{ --team-color: var(--c-leader3); }
     .team-leader4{ --team-color: var(--c-leader4); }
-
-    /* ✅ 포지션 라벨 숨김 (TOP/JGL/MID/BOT/SUP 사라짐) */
-    .slot-label { display: none !important; }
 
     /* ===== CENTER: CURRENT AUCTION ===== */
     .col-center{ display:flex; flex-direction:column; min-height:0; }
@@ -241,6 +233,7 @@
       font-size:12px; padding:6px 8px; border-radius:8px;
     }
 
+    /* 낙찰 오버레이 */
     .auction-overlay{
       position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
       background:rgba(6,9,18,0.65); backdrop-filter: blur(3px);
@@ -277,6 +270,7 @@
     .overlay-name{ font-size:15px; font-weight:900; color:#fff; white-space:nowrap; }
     .overlay-price{ font-size:13px; color:#cbd7f7; margin-top:2px; font-weight:800; }
 
+    /* 로고 패널 */
     .center-logo-panel{
       flex:0.50;
       display:flex; align-items:center; justify-content:center;
@@ -289,14 +283,14 @@
       filter: drop-shadow(0 6px 18px rgba(0,0,0,0.6));
     }
 
-    /* ===== RIGHT: GROUP ROSTERS (A/B/UNSOLD) ===== */
+    /* ===== RIGHT: GROUP ROSTERS (A/B + 유찰) ===== */
     .roster-panel{
       display:flex; flex-direction:column; gap:8px;
       min-height:0; height:100%;
     }
     .roster-grid{
-      display:grid; grid-template-columns:1fr 1fr; gap:8px;
-      min-height:0; height:100%;
+      display:grid; grid-template-columns:1fr 1fr 1fr; /* ✅ 유찰까지 3칸 */
+      gap:8px; min-height:0; height:100%;
     }
     .group-box{
       background:var(--panel2);
@@ -329,7 +323,6 @@
       border:2px solid #3b4f86; background:#0a0f1e;
       filter:saturate(1.05); transition:all .2s ease;
     }
-
     .avatar.current img{
       border-color:#7aa2ff; box-shadow:0 0 14px rgba(122,162,255,0.7);
     }
@@ -345,15 +338,10 @@
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
 
-    /* ✅ 유찰 박스는 한 줄 전체 폭 */
-    .unsold-box{ grid-column:1 / -1; }
-    .unsold-box .avatars{ grid-template-columns:repeat(6,1fr); }
-
     @media (max-width:1100px){
       .wrap{ grid-template-columns:1fr; height:auto; }
       .roster-grid{ grid-template-columns:1fr; }
-      .avatars{ grid-template-columns:repeat(5,1fr); }
-      .unsold-box .avatars{ grid-template-columns:repeat(5,1fr); }
+      .avatars{ grid-template-columns:repeat(4,1fr); }
       .center-logo-panel img{ width:42%; max-width:190px; }
       .current-player{ grid-template-columns:108px 1fr; }
       .current-player img{ width:108px; height:108px; }
@@ -395,7 +383,7 @@
   <!-- MAIN -->
   <div class="wrap">
 
-    <!-- LEFT COLUMN -->
+    <!-- LEFT COLUMN: TEAM ROSTERS -->
     <div class="col col-left">
       <div class="panel team-card team-leader1" id="team-leader1"></div>
       <div class="panel team-card team-leader2" id="team-leader2"></div>
@@ -403,7 +391,7 @@
       <div class="panel team-card team-leader4" id="team-leader4"></div>
     </div>
 
-    <!-- CENTER COLUMN -->
+    <!-- CENTER COLUMN: CURRENT AUCTION -->
     <div class="col col-center">
       <div class="panel current-auction-panel">
         <div class="panel-title">
@@ -449,6 +437,7 @@
             <div>리더: <b id="highest-leader">-</b></div>
           </div>
 
+          <!-- TIME COUNT + 현재 선수 이름 -->
           <div class="timer-bar">
             <div class="timer-left">
               <span>TIME COUNT</span>
@@ -467,7 +456,7 @@
       </div>
     </div>
 
-    <!-- RIGHT COLUMN -->
+    <!-- RIGHT COLUMN: GROUP ROSTERS -->
     <div class="col">
       <div class="panel roster-panel">
         <div class="panel-title">
@@ -486,9 +475,8 @@
             <div class="avatars" id="roster-B"></div>
           </div>
 
-          <!-- ✅ 유찰 그룹 -->
-          <div class="group-box unsold-box">
-            <div class="group-title">UNSOLD <span class="pill">유찰</span></div>
+          <div class="group-box">
+            <div class="group-title">유찰 그룹 <span class="pill">잔여</span></div>
             <div class="avatars" id="roster-U"></div>
           </div>
         </div>
