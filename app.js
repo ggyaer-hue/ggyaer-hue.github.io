@@ -14,14 +14,13 @@ import {
   updateDoc,
   serverTimestamp,
   writeBatch,
-  getDoc,
 } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
 // ====== CONSTANTS ======
 const ROOM_ID = "room1";
-const AUCTION_SECONDS = 15;          // 1명당 기본 경매 시간(초)
+const AUCTION_SECONDS = 15;          // 1명당 경매 시간(초)
 const BID_STEP = 5;                  // 5점 단위
-const TEAM_START_POINTS = 1000;      // 각 팀 시작 포인트
+const TEAM_START_POINTS = 1000;      // 팀 시작 포인트
 const GROUP_A_MIN_BID = 300;         // A그룹 최소 입찰 300점
 
 // 팀 문서 아이디 & 화면 표시 이름
@@ -45,10 +44,10 @@ const TEAM_LABEL_BY_ID = {
 };
 
 // ====== FIRESTORE REFS ======
-const roomRef = doc(db, "rooms", ROOM_ID);
+const roomRef   = doc(db, "rooms", ROOM_ID);
 const playersCol = collection(db, "rooms", ROOM_ID, "players");
-const teamsCol = collection(db, "rooms", ROOM_ID, "teams");
-const logsCol = collection(db, "rooms", ROOM_ID, "logs");
+const teamsCol   = collection(db, "rooms", ROOM_ID, "teams");
+const logsCol    = collection(db, "rooms", ROOM_ID, "logs");
 
 // ====== STATE ======
 let roomState = null;
@@ -58,11 +57,10 @@ let myRole = "viewer";
 let tickTimer = null;
 let localFinalizing = false;   // 타이머에서 finalize 중복 호출 방지
 
-// ====== DOM HELPERS ======
+// ====== HELPERS ======
 const $ = (id) => document.getElementById(id);
 const normGroup = (g) => String(g || "").trim().toUpperCase();
 
-// ----- 상태 판별 -----
 const isOperator = () => myRole === "operator";
 const getMyTeamId = () => (myRole.startsWith("leader") ? myRole : null);
 
@@ -70,20 +68,19 @@ const getMyTeamId = () => (myRole.startsWith("leader") ? myRole : null);
 const isUnsold = (p) =>
   p.status === "unsold" || p.status === "유찰";
 
-// 더 이상 경매 대상이 아닌가? (팀에 갔거나 유찰이면 true)
+// 더 이상 경매 대상이 아닌 선수인가? (팀에 갔거나 유찰이면 true)
 const isFinishedPlayer = (p) =>
   !!p.assignedTeamId || isUnsold(p);
 
-// 아직 경매 대상에 남아 있는 선수인가?
+// 아직 경매 대상 목록에 남아 있는 선수인가?
 const isAvailable = (p) => !isFinishedPlayer(p);
-
 
 // ====== SNAPSHOT LISTENERS ======
 onSnapshot(roomRef, (snap) => {
   roomState = snap.exists() ? { id: snap.id, ...snap.data() } : null;
   renderRoomStatus();
   renderCurrent();
-  startTimerLoop();   // roomState 바뀔 때마다 타이머 재시작
+  startTimerLoop();
 });
 
 onSnapshot(teamsCol, (snap) => {
@@ -96,6 +93,7 @@ onSnapshot(teamsCol, (snap) => {
 
 onSnapshot(query(playersCol, orderBy("orderIndex")), (snap) => {
   players = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  console.log("[players] snapshot count:", players.length);
   renderTeams();
   renderRosters();
   renderCurrent();
@@ -201,7 +199,7 @@ function renderTeams() {
     if (!box) return;
 
     const roster = players
-      .filter((p) => p.assignedTeamId === teamId && p.status === "sold")
+      .filter((p) => p.assignedTeamId === teamId)
       .sort((a, b) => (a.orderIndex ?? 999) - (b.orderIndex ?? 999));
 
     const tDoc = teamsById[teamId];
@@ -226,9 +224,7 @@ function renderTeams() {
     const slotsHtml = [0, 1, 2, 3]
       .map((i) => {
         const p = roster[i];
-        if (!p) {
-          return `<div class="slot empty"></div>`;
-        }
+        if (!p) return `<div class="slot empty"></div>`;
         return `
           <div class="slot">
             <img src="${p.photoUrl || ""}" alt="${p.name || p.id}">
@@ -250,7 +246,6 @@ function renderRosters() {
   const boxA = $("roster-A");
   const boxB = $("roster-B");
   const boxU = $("roster-U");
-  if (!boxA || !boxB || !boxU) return;
 
   const sortByOrder = (a, b) =>
     (a.orderIndex ?? 999) - (b.orderIndex ?? 999);
@@ -278,9 +273,10 @@ function renderRosters() {
     `;
   };
 
-  boxA.innerHTML = listA.map(htmlFor).join("");
-  boxB.innerHTML = listB.map(htmlFor).join("");
-  boxU.innerHTML = listU.map(htmlFor).join("");
+  // ❗ 세 박스 중 하나가 없어도 나머지는 그리도록 개별 처리
+  if (boxA) boxA.innerHTML = listA.map(htmlFor).join("");
+  if (boxB) boxB.innerHTML = listB.map(htmlFor).join("");
+  if (boxU) boxU.innerHTML = listU.map(htmlFor).join("");
 }
 
 // ====== TIMER LOOP ======
@@ -298,7 +294,7 @@ function startTimerLoop() {
     const left = Math.max(0, Math.ceil(leftMs / 1000));
     if (tEl) tEl.textContent = left;
 
-    // ⏱ 남은 시간이 0이고 아직 running이면 -> 역할 상관없이 한 번만 finalize
+    // 남은 시간이 0이고 아직 running이면 -> 역할 상관없이 한 번만 finalize
     if (
       left <= 0 &&
       roomState.status === "running" &&
@@ -314,7 +310,7 @@ function startTimerLoop() {
   }, 250);
 }
 
-// ====== NEXT PLAYER HELPERS (로컬 players 배열 기준) ======
+// ====== NEXT PLAYER HELPERS ======
 function sortedMainPlayers() {
   const list = players.filter((p) => isAvailable(p));
   return list.sort((a, b) => {
@@ -397,10 +393,11 @@ async function startRemainingAuction() {
   });
 }
 
+// ❗ 모든 read 를 먼저, 그 다음 write
 async function finalizeCurrentAuction(reason = "sold") {
   try {
     await runTransaction(db, async (tx) => {
-      // 1) 룸 읽기
+      // 1) room 읽기
       const roomSnap = await tx.get(roomRef);
       if (!roomSnap.exists()) throw new Error("room missing");
       const r = roomSnap.data();
@@ -417,18 +414,18 @@ async function finalizeCurrentAuction(reason = "sold") {
       const highestBid = r.highestBid ?? 0;
       const bidderId = r.highestBidderId || null;
 
-      // 3) 팀이 필요하다면, 팀도 "먼저" 읽기
+      // 3) 팀이 필요하다면 팀도 미리 읽기
       let teamRef = null;
       let teamData = null;
       if (highestBid > 0 && bidderId) {
         teamRef = doc(teamsCol, bidderId);
-        const teamSnap = await tx.get(teamRef);   // ❗ 여기까지가 모든 읽기
+        const teamSnap = await tx.get(teamRef);
         if (teamSnap.exists()) {
           teamData = teamSnap.data();
         }
       }
 
-      // ===== 여기부터는 쓰기만 수행 =====
+      // ===== 여기부터는 write만 =====
 
       if (highestBid > 0 && bidderId) {
         // 낙찰 처리
@@ -454,7 +451,7 @@ async function finalizeCurrentAuction(reason = "sold") {
         });
       }
 
-      // 다음 선수 선택 (로컬 players 배열만 사용 → Firestore 추가 읽기 없음)
+      // 다음 선수 선택 (클라이언트 players 배열만 사용)
       let nextPlayer = null;
       if (r.remainingMode) {
         nextPlayer = getNextUnsoldPlayer(curId);
@@ -492,7 +489,6 @@ async function finalizeCurrentAuction(reason = "sold") {
   }
 }
 
-
 async function resetAll() {
   if (!isOperator()) {
     alert("운영자만 가능합니다.");
@@ -501,9 +497,9 @@ async function resetAll() {
 
   if (!confirm("전체 리셋 (포인트, 선수상태, 로그)을 진행할까요?")) return;
 
-  // 플레이어/팀/룸 리셋
   const batch = writeBatch(db);
 
+  // 플레이어 리셋
   const pSnap = await getDocs(playersCol);
   pSnap.forEach((d) => {
     batch.update(d.ref, {
@@ -514,11 +510,13 @@ async function resetAll() {
     });
   });
 
+  // 팀 포인트 리셋
   const tSnap = await getDocs(teamsCol);
   tSnap.forEach((d) => {
     batch.update(d.ref, { pointsRemaining: TEAM_START_POINTS });
   });
 
+  // room 리셋
   batch.update(roomRef, {
     status: "waiting",
     remainingMode: false,
@@ -601,7 +599,7 @@ async function placeBid() {
       const teamLabel =
         TEAM_LABEL_BY_ID[teamId] || t.name || teamId;
 
-      // room 최고 입찰 갱신
+      // room 최고 입찰 갱신 (write)
       tx.update(roomRef, {
         highestBid: amount,
         highestBidderId: teamId,
@@ -609,7 +607,7 @@ async function placeBid() {
         lastBidAtMs: Date.now(),
       });
 
-      // 로그 기록
+      // 로그 기록 (write)
       const logRef = doc(logsCol);
       tx.set(logRef, {
         createdAt: serverTimestamp(),
