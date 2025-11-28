@@ -396,6 +396,7 @@ async function startRemainingAuction() {
 async function finalizeCurrentAuction(reason = "sold") {
   try {
     await runTransaction(db, async (tx) => {
+      // 1) 룸 읽기
       const roomSnap = await tx.get(roomRef);
       if (!roomSnap.exists()) throw new Error("room missing");
       const r = roomSnap.data();
@@ -403,6 +404,7 @@ async function finalizeCurrentAuction(reason = "sold") {
       const curId = r.currentPlayerId;
       if (!curId) return;
 
+      // 2) 현재 선수 읽기
       const curRef = doc(playersCol, curId);
       const curSnap = await tx.get(curRef);
       if (!curSnap.exists()) return;
@@ -411,8 +413,21 @@ async function finalizeCurrentAuction(reason = "sold") {
       const highestBid = r.highestBid ?? 0;
       const bidderId = r.highestBidderId || null;
 
+      // 3) 팀이 필요하다면, 팀도 "먼저" 읽기
+      let teamRef = null;
+      let teamData = null;
       if (highestBid > 0 && bidderId) {
-        // ✅ 낙찰
+        teamRef = doc(teamsCol, bidderId);
+        const teamSnap = await tx.get(teamRef);   // ❗ 여기까지가 모든 읽기
+        if (teamSnap.exists()) {
+          teamData = teamSnap.data();
+        }
+      }
+
+      // ===== 여기부터는 쓰기만 수행 =====
+
+      if (highestBid > 0 && bidderId) {
+        // 낙찰 처리
         tx.update(curRef, {
           status: "sold",
           assignedTeamId: bidderId,
@@ -420,16 +435,13 @@ async function finalizeCurrentAuction(reason = "sold") {
           updatedAt: serverTimestamp(),
         });
 
-        const teamRef = doc(teamsCol, bidderId);
-        const teamSnap = await tx.get(teamRef);
-        if (teamSnap.exists()) {
-          const t = teamSnap.data();
+        if (teamData && teamRef) {
           const remain =
-            (t.pointsRemaining ?? TEAM_START_POINTS) - highestBid;
+            (teamData.pointsRemaining ?? TEAM_START_POINTS) - highestBid;
           tx.update(teamRef, { pointsRemaining: remain });
         }
       } else {
-        // ✅ 유찰
+        // 유찰 처리
         tx.update(curRef, {
           status: "unsold",
           assignedTeamId: null,
@@ -438,7 +450,7 @@ async function finalizeCurrentAuction(reason = "sold") {
         });
       }
 
-      // 다음 선수 선택
+      // 다음 선수 선택 (로컬 players 배열만 사용 → Firestore 추가 읽기 없음)
       let nextPlayer = null;
       if (r.remainingMode) {
         nextPlayer = getNextUnsoldPlayer(curId);
@@ -457,24 +469,25 @@ async function finalizeCurrentAuction(reason = "sold") {
           highestBidderName: null,
           endsAtMs: null,
         });
-        return;
+      } else {
+        // 다음 선수로 이동
+        tx.update(roomRef, {
+          status: "running",
+          currentPlayerId: nextPlayer.id,
+          currentGroup: normGroup(nextPlayer.group),
+          highestBid: 0,
+          highestBidderId: null,
+          highestBidderName: null,
+          endsAtMs: Date.now() + AUCTION_SECONDS * 1000,
+        });
       }
-
-      tx.update(roomRef, {
-        status: "running",
-        currentPlayerId: nextPlayer.id,
-        currentGroup: normGroup(nextPlayer.group),
-        highestBid: 0,
-        highestBidderId: null,
-        highestBidderName: null,
-        endsAtMs: Date.now() + AUCTION_SECONDS * 1000,
-      });
     });
   } catch (err) {
     console.error(err);
     alert(err.message || "낙찰 처리 중 오류가 발생했습니다.");
   }
 }
+
 
 async function resetAll() {
   if (!isOperator()) {
