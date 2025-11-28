@@ -300,9 +300,15 @@
       display:flex; flex-direction:column; gap:8px;
       min-height:0; height:100%;
     }
-    .roster-grid{
-      display:grid; grid-template-columns:1fr 1fr 1fr; /* ✅ 유찰까지 3칸 */
-      gap:8px; min-height:0; height:100%;
+    
+   .roster-grid{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)); /* ✅ A / B / 유찰 가로 3칸 */
+  gap:8px;
+  min-height:0;
+  height:100%;
+}
+    
     }
     .group-box{
       background:var(--panel2);
@@ -500,4 +506,5 @@
   <script type="module" src="./app.js"></script>
 </body>
 </html>
+
 
