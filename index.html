@@ -106,9 +106,10 @@
       border:1px solid var(--line);
     }
 
+    /* 팀 슬롯 4칸 */
     .team-row{
       display:grid;
-      grid-template-columns: repeat(4, 1fr); /* 팀원 4칸 */
+      grid-template-columns: repeat(4, 1fr);
       gap:8px;
       flex:1;
       grid-auto-rows:1fr;
@@ -301,7 +302,7 @@
     }
     .group-title{
       font-weight:900; font-size:14px;
-      margin-bottom:4px;
+      margin-bottom:4px;              /* 간격 살짝 줄임 */
       display:flex; align-items:center; gap:6px;
     }
     .group-title .pill{
@@ -314,7 +315,7 @@
     .avatars{
       display:grid;
       grid-template-columns:repeat(4,1fr);
-      gap:6px;
+      gap:6px;                /* 8 → 6 */
       overflow:auto;
       padding-right:2px;
       min-height:0;
@@ -322,11 +323,11 @@
     .avatar{
       position:relative;
       display:flex; flex-direction:column; align-items:center;
-      gap:2px;
-      padding:2px 0;
+      gap:2px;                /* 4 → 2 */
+      padding:2px 0;          /* 세로 높이 줄이기 */
     }
     .avatar img{
-      width:60px;
+      width:60px;             /* 68 → 60 */
       height:60px;
       border-radius:8px;
       object-fit:cover;
@@ -335,9 +336,9 @@
     .avatar.sold img{ opacity:0.55; }
 
     .name-tip{
-      font-size:10px;
+      font-size:10px;         /* 11 → 10 */
       color:#e7eeff; font-weight:700;
-      text-align:center; max-width:80px;
+      text-align:center; max-width:80px; /* 86 → 80 */
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
 
