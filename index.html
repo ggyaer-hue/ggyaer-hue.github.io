@@ -92,12 +92,6 @@
       padding:8px; position:relative;
       flex:1; display:flex; flex-direction:column;
     }
-    .team-card::after{
-      content:""; position:absolute; inset:-1px;
-      border-radius:14px; pointer-events:none;
-      border:1px solid color-mix(in srgb, var(--team-color) 60%, transparent);
-      box-shadow:0 0 22px color-mix(in srgb, var(--team-color) 30%, transparent);
-    }
     .team-header{
       display:flex; justify-content:space-between; align-items:center;
       font-size:14px; font-weight:900; margin-bottom:6px;
@@ -105,7 +99,6 @@
     .team-header .team-name{
       display:flex; align-items:center; gap:6px;
       color:var(--team-color);
-      text-shadow:0 0 12px color-mix(in srgb, var(--team-color) 60%, transparent);
     }
     .team-points{
       font-size:12px; color:var(--muted);
@@ -113,10 +106,9 @@
       border:1px solid var(--line);
     }
 
-    /* 팀 슬롯: 4칸 */
     .team-row{
       display:grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(4, 1fr); /* 팀원 4칸 */
       gap:8px;
       flex:1;
       grid-auto-rows:1fr;
@@ -138,7 +130,6 @@
     .slot img{
       width:48px; height:48px; border-radius:999px; object-fit:cover;
       border:2px solid var(--team-color);
-      box-shadow:0 0 10px color-mix(in srgb, var(--team-color) 40%, transparent);
       background:#0a0f1e;
     }
     .slot-text{ margin-top:6px; text-align:center; line-height:1.1; width:100%; }
@@ -243,23 +234,19 @@
       font-size:12px; padding:6px 8px; border-radius:8px;
     }
 
-    /* 낙찰 오버레이 */
+    /* 낙찰 오버레이 (기능 유지용, 스타일 심플) */
     .auction-overlay{
       position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-      background:rgba(6,9,18,0.65); backdrop-filter: blur(3px);
+      background:rgba(6,9,18,0.65);
       border-radius:12px; z-index:5; opacity:0; pointer-events:none;
       transform:scale(0.98);
+      transition:opacity .2s ease;
     }
-    .auction-overlay.show{ animation: overlayIn 1.4s ease forwards; }
-    @keyframes overlayIn{
-      0%{opacity:0; transform:scale(0.98);}
-      15%{opacity:1; transform:scale(1.02);}
-      70%{opacity:1; transform:scale(1.0);}
-      100%{opacity:0; transform:scale(0.98);}
-    }
+    .auction-overlay.show{ opacity:1; }
+
     .overlay-card{
       min-width:240px;
-      background:linear-gradient(180deg,#121a35,#0d1328);
+      background:#121a35;
       border:1px solid #2c3c66;
       border-radius:14px;
       padding:12px;
@@ -268,13 +255,11 @@
     }
     .overlay-team{
       font-size:16px; font-weight:900; margin-bottom:8px;
-      text-shadow:0 0 14px currentColor;
     }
     .overlay-player{ display:flex; gap:10px; align-items:center; justify-content:center; }
     .overlay-player img{
       width:62px; height:62px; border-radius:999px; object-fit:cover;
-      border:3px solid currentColor;
-      box-shadow:0 0 16px color-mix(in srgb, currentColor 60%, transparent);
+      border:3px solid #cbd7f7;
       background:#0a0f1e;
     }
     .overlay-name{ font-size:15px; font-weight:900; color:#fff; white-space:nowrap; }
@@ -316,7 +301,7 @@
     }
     .group-title{
       font-weight:900; font-size:14px;
-      margin-bottom:4px;      /* 간격 조금 줄임 */
+      margin-bottom:4px;
       display:flex; align-items:center; gap:6px;
     }
     .group-title .pill{
@@ -329,7 +314,7 @@
     .avatars{
       display:grid;
       grid-template-columns:repeat(4,1fr);
-      gap:6px;                /* 8 → 6 */
+      gap:6px;
       overflow:auto;
       padding-right:2px;
       min-height:0;
@@ -337,30 +322,22 @@
     .avatar{
       position:relative;
       display:flex; flex-direction:column; align-items:center;
-      gap:2px;                /* 4 → 2 */
-      padding:2px 0;          /* 세로 높이 줄이기 */
+      gap:2px;
+      padding:2px 0;
     }
     .avatar img{
-      width:60px;             /* 68 → 60 */
+      width:60px;
       height:60px;
       border-radius:8px;
       object-fit:cover;
       border:2px solid #3b4f86; background:#0a0f1e;
-      filter:saturate(1.05); transition:all .2s ease;
     }
-    .avatar.current img{
-      border-color:#7aa2ff; box-shadow:0 0 14px rgba(122,162,255,0.7);
-    }
-    .avatar.sold-by-leader1 img{ border-color:var(--c-leader1); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader1) 60%, transparent); }
-    .avatar.sold-by-leader2 img{ border-color:var(--c-leader2); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader2) 60%, transparent); }
-    .avatar.sold-by-leader3 img{ border-color:var(--c-leader3); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader3) 60%, transparent); }
-    .avatar.sold-by-leader4 img{ border-color:var(--c-leader4); box-shadow:0 0 12px color-mix(in srgb,var(--c-leader4) 60%, transparent); }
     .avatar.sold img{ opacity:0.55; }
 
     .name-tip{
-      font-size:10px;         /* 11 → 10 */
+      font-size:10px;
       color:#e7eeff; font-weight:700;
-      text-align:center; max-width:80px; /* 86 → 80 */
+      text-align:center; max-width:80px;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
 
