@@ -585,33 +585,34 @@ async function placeBid() {
       const highest = r.highestBid ?? 0;
       const g = normGroup(cur.group);
 
-      if (!r.remainingMode) {
-        // 본경매 (A/B)
-        if (amount <= 0) {
-          throw new Error("0점 이하는 입찰할 수 없습니다.");
-        }
-        if (amount % BID_STEP !== 0) {
-          throw new Error(`입찰은 ${BID_STEP}점 단위만 가능합니다.`);
-        }
-        if (amount < highest + BID_STEP) {
-          throw new Error(`최소 ${BID_STEP}점 이상 올려야 합니다.`);
-        }
-        if (g === "A" && amount < GROUP_A_MIN_BID) {
-          throw new Error(
-            `GROUP A 선수는 최소 ${GROUP_A_MIN_BID}점 이상부터 입찰 가능합니다.`
-          );
-        }
-      } else {
-        // 유찰 재경매 모드: 0점 허용, 현재가 이상이면 OK
-        if (amount < 0) {
-          throw new Error("0점 이상으로 입력해 주세요.");
-        }
-        if (amount < highest) {
-          throw new Error(
-            "현재 입찰가보다 같거나 높은 금액만 입력할 수 있습니다."
-          );
-        }
-      }
+    if (!r.remainingMode) {
+  // 🔹 본경매(A/B) — 예전 규칙 그대로
+  if (amount <= 0) {
+    throw new Error("0점 이하는 입찰할 수 없습니다.");
+  }
+  if (amount % BID_STEP !== 0) {
+    throw new Error(`입찰은 ${BID_STEP}점 단위만 가능합니다.`);
+  }
+  if (amount < highest + BID_STEP) {
+    throw new Error(`최소 ${BID_STEP}점 이상 올려야 합니다.`);
+  }
+  if (g === "A" && amount < GROUP_A_MIN_BID) {
+    throw new Error(
+      `GROUP A 선수는 최소 ${GROUP_A_MIN_BID}점 이상부터 입찰 가능합니다.`
+    );
+  }
+} else {
+  // 🔹 유찰 재경매 모드
+  // 👉 0점도 허용, 음수만 막고 "현재가 이상"만 체크
+  if (amount < 0) {
+    throw new Error("0점 이상으로 입력해 주세요.");
+  }
+  if (amount < highest) {
+    throw new Error("현재 입찰가보다 같거나 높은 금액만 가능합니다.");
+  }
+  // 여기서는 5점 단위 / 최소 5점 증액 같은 제한 없음
+}
+
 
       const teamRef = doc(teamsCol, teamId);
       const teamSnap = await tx.get(teamRef);
