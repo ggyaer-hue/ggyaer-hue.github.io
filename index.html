@@ -87,7 +87,6 @@
     }
 
     /* ===== LEFT: TEAMS ===== */
-    .col-left{ flex:1; }
     .team-card{
       padding:8px; position:relative;
       flex:1; display:flex; flex-direction:column;
@@ -98,39 +97,28 @@
     }
     .team-header .team-name{
       display:flex; align-items:center; gap:6px;
-      color:var(--team-color);
     }
     .team-points{
       font-size:12px; color:var(--muted);
       padding:4px 8px; border-radius:999px; background:var(--panel2);
       border:1px solid var(--line);
     }
-
-    /* 팀 슬롯 4칸 */
     .team-row{
-      display:grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap:8px;
-      flex:1;
-      grid-auto-rows:1fr;
-      align-content:stretch;
+      display:grid; grid-template-columns: repeat(4, 1fr);
+      gap:8px; flex:1; grid-auto-rows:1fr; align-content:stretch;
     }
     .slot{
       background:var(--panel2);
       border:1px dashed #2a3660;
       border-radius:12px;
-      padding:6px;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:flex-start;
-      min-height:96px;
-      position:relative;
+      padding:6px; display:flex; flex-direction:column;
+      align-items:center; justify-content:flex-start;
+      min-height:96px; position:relative;
     }
     .slot.empty{ opacity:0.75; }
     .slot img{
       width:48px; height:48px; border-radius:999px; object-fit:cover;
-      border:2px solid var(--team-color);
+      border:2px solid #3b4f86;
       background:#0a0f1e;
     }
     .slot-text{ margin-top:6px; text-align:center; line-height:1.1; width:100%; }
@@ -140,10 +128,11 @@
     }
     .slot-price{ font-size:11px; color:var(--muted); margin-top:2px; }
 
-    .team-leader1{ --team-color: var(--c-leader1); }
-    .team-leader2{ --team-color: var(--c-leader2); }
-    .team-leader3{ --team-color: var(--c-leader3); }
-    .team-leader4{ --team-color: var(--c-leader4); }
+    /* 팀 색상 (좌측 박스 테두리) */
+    .team-leader1{ box-shadow:0 0 0 1px rgba(122,162,255,0.6); }
+    .team-leader2{ box-shadow:0 0 0 1px rgba(255,122,214,0.6); }
+    .team-leader3{ box-shadow:0 0 0 1px rgba(98,231,167,0.6); }
+    .team-leader4{ box-shadow:0 0 0 1px rgba(255,204,102,0.6); }
 
     /* ===== CENTER: CURRENT AUCTION ===== */
     .col-center{ display:flex; flex-direction:column; min-height:0; }
@@ -229,42 +218,12 @@
     .bid-log .item{ padding:2px 0; border-bottom:1px dashed #1f2a49; }
 
     #admin-controls{
-      display:flex; flex-wrap:wrap; gap:6px; margin-top:2px;
+      display:none;
+      flex-wrap:wrap; gap:6px; margin-top:2px;
     }
     #admin-controls button{
       font-size:12px; padding:6px 8px; border-radius:8px;
     }
-
-    /* 낙찰 오버레이 (기능 유지용, 스타일 심플) */
-    .auction-overlay{
-      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-      background:rgba(6,9,18,0.65);
-      border-radius:12px; z-index:5; opacity:0; pointer-events:none;
-      transform:scale(0.98);
-      transition:opacity .2s ease;
-    }
-    .auction-overlay.show{ opacity:1; }
-
-    .overlay-card{
-      min-width:240px;
-      background:#121a35;
-      border:1px solid #2c3c66;
-      border-radius:14px;
-      padding:12px;
-      box-shadow:0 0 40px rgba(0,0,0,0.6);
-      text-align:center;
-    }
-    .overlay-team{
-      font-size:16px; font-weight:900; margin-bottom:8px;
-    }
-    .overlay-player{ display:flex; gap:10px; align-items:center; justify-content:center; }
-    .overlay-player img{
-      width:62px; height:62px; border-radius:999px; object-fit:cover;
-      border:3px solid #cbd7f7;
-      background:#0a0f1e;
-    }
-    .overlay-name{ font-size:15px; font-weight:900; color:#fff; white-space:nowrap; }
-    .overlay-price{ font-size:13px; color:#cbd7f7; margin-top:2px; font-weight:800; }
 
     /* 로고 패널 */
     .center-logo-panel{
@@ -279,30 +238,19 @@
       filter: drop-shadow(0 6px 18px rgba(0,0,0,0.6));
     }
 
-    /* ===== RIGHT: GROUP ROSTERS (A/B + 유찰) ===== */
+    /* ===== RIGHT: GROUP ROSTERS (A/B + UNSOLD) ===== */
     .roster-panel{
       display:flex; flex-direction:column; gap:8px;
       min-height:0; height:100%;
     }
-
-    /* 세로 3칸(A, B, 유찰) */
-    .roster-grid{
-      display:grid;
-      grid-template-columns: 1fr;
-      grid-auto-rows: minmax(0, 1fr);
-      gap:8px;
-      min-height:0;
-      height:100%;
-    }
-
     .group-box{
       background:var(--panel2);
       border:1px solid var(--line); border-radius:12px;
       padding:8px; display:flex; flex-direction:column; min-height:0;
+      flex:1;
     }
     .group-title{
-      font-weight:900; font-size:14px;
-      margin-bottom:4px;              /* 간격 살짝 줄임 */
+      font-weight:900; font-size:14px; margin-bottom:8px;
       display:flex; align-items:center; gap:6px;
     }
     .group-title .pill{
@@ -311,41 +259,44 @@
       background:#0c1226;
     }
 
-    /* 아바타 그리드/간격 축소 */
     .avatars{
       display:grid;
-      grid-template-columns:repeat(4,1fr);
-      gap:6px;                /* 8 → 6 */
+      grid-template-columns:repeat(3, minmax(80px,1fr));
+      gap:10px;
       overflow:auto;
-      padding-right:2px;
-      min-height:0;
+      padding-right:2px; min-height:0;
     }
     .avatar{
       position:relative;
-      display:flex; flex-direction:column; align-items:center;
-      gap:2px;                /* 4 → 2 */
-      padding:2px 0;          /* 세로 높이 줄이기 */
+      display:flex; flex-direction:column; align-items:center; gap:4px;
+      padding:4px 0;
     }
     .avatar img{
-      width:60px;             /* 68 → 60 */
-      height:60px;
+      width:68px; height:68px;
       border-radius:8px;
       object-fit:cover;
       border:2px solid #3b4f86; background:#0a0f1e;
+      filter:saturate(1.05); transition:all .2s ease;
     }
+    .avatar.current img{
+      border-color:#7aa2ff;
+      box-shadow:0 0 14px rgba(122,162,255,0.7);
+    }
+    /* 팀별 낙찰 표시 */
+    .avatar.sold-by-leader1 img{ border-color:var(--c-leader1); box-shadow:0 0 12px rgba(122,162,255,0.6); }
+    .avatar.sold-by-leader2 img{ border-color:var(--c-leader2); box-shadow:0 0 12px rgba(255,122,214,0.6); }
+    .avatar.sold-by-leader3 img{ border-color:var(--c-leader3); box-shadow:0 0 12px rgba(98,231,167,0.6); }
+    .avatar.sold-by-leader4 img{ border-color:var(--c-leader4); box-shadow:0 0 12px rgba(255,204,102,0.6); }
     .avatar.sold img{ opacity:0.55; }
 
     .name-tip{
-      font-size:10px;         /* 11 → 10 */
-      color:#e7eeff; font-weight:700;
-      text-align:center; max-width:80px; /* 86 → 80 */
+      font-size:11px; color:#e7eeff; font-weight:700;
+      text-align:center; max-width:86px;
       white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     }
 
     @media (max-width:1100px){
       .wrap{ grid-template-columns:1fr; height:auto; }
-      .roster-grid{ grid-template-columns:1fr; }
-      .avatars{ grid-template-columns:repeat(4,1fr); }
       .center-logo-panel img{ width:42%; max-width:190px; }
       .current-player{ grid-template-columns:108px 1fr; }
       .current-player img{ width:108px; height:108px; }
@@ -375,7 +326,7 @@
         <option value="operator">운영자</option>
       </select>
 
-      <div id="admin-controls" style="display:none;">
+      <div id="admin-controls">
         <button id="btn-start-test">테스트 시작</button>
         <button id="btn-start-real">본경매 시작</button>
         <button id="btn-start-remaining">잔여 재경매</button>
@@ -387,7 +338,7 @@
   <!-- MAIN -->
   <div class="wrap">
 
-    <!-- LEFT COLUMN: TEAM ROSTERS -->
+    <!-- LEFT COLUMN : 팀 로스터 -->
     <div class="col col-left">
       <div class="panel team-card team-leader1" id="team-leader1"></div>
       <div class="panel team-card team-leader2" id="team-leader2"></div>
@@ -395,37 +346,23 @@
       <div class="panel team-card team-leader4" id="team-leader4"></div>
     </div>
 
-    <!-- CENTER COLUMN: CURRENT AUCTION -->
+    <!-- CENTER COLUMN : 현재 경매 -->
     <div class="col col-center">
       <div class="panel current-auction-panel">
         <div class="panel-title">
           <span>Current Auction</span>
-          <span class="badge" id="current-player-status">-</span>
+          <span class="badge" id="current-player-status">waiting</span>
         </div>
 
         <div class="current-wrap">
-          <!-- Sold Overlay -->
-          <div id="auction-overlay" class="auction-overlay">
-            <div class="overlay-card">
-              <div id="auction-overlay-team" class="overlay-team">-</div>
-              <div class="overlay-player">
-                <img id="auction-overlay-photo" src="" alt="">
-                <div>
-                  <div id="auction-overlay-name" class="overlay-name">-</div>
-                  <div id="auction-overlay-price" class="overlay-price">-</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div class="current-player">
-            <img id="current-player-photo" src="" alt="" />
+            <img id="current-player-photo" src="" alt="current" />
             <div>
               <div class="current-name" id="current-player-name">-</div>
               <div class="current-meta">
                 <div class="meta-chip">ROLE: <b id="current-player-role">-</b></div>
                 <div class="meta-chip">GROUP: <b id="current-player-group">-</b></div>
-                <div class="meta-chip">BASE: <b id="current-player-base">-</b></div>
+                <div class="meta-chip">BASE: <b id="current-player-base">0</b></div>
               </div>
               <div class="current-bio" id="current-player-bio">-</div>
             </div>
@@ -437,7 +374,7 @@
           </div>
 
           <div class="highest">
-            <div>최고가: <b id="highest-amount">-</b></div>
+            <div>최고가: <b id="highest-amount">0</b></div>
             <div>리더: <b id="highest-leader">-</b></div>
           </div>
 
@@ -460,29 +397,27 @@
       </div>
     </div>
 
-    <!-- RIGHT COLUMN: GROUP ROSTERS -->
-    <div class="col">
+    <!-- RIGHT COLUMN : 그룹별 명단 + 유찰 -->
+    <div class="col col-right">
       <div class="panel roster-panel">
         <div class="panel-title">
           <span>그룹별 명단</span>
           <span class="badge">A / B / 유찰</span>
         </div>
 
-        <div class="roster-grid">
-          <div class="group-box">
-            <div class="group-title">GROUP A <span class="pill">1차</span></div>
-            <div class="avatars" id="roster-A"></div>
-          </div>
+        <div class="group-box">
+          <div class="group-title">GROUP A <span class="pill">1차</span></div>
+          <div class="avatars" id="roster-A"></div>
+        </div>
 
-          <div class="group-box">
-            <div class="group-title">GROUP B <span class="pill">1차</span></div>
-            <div class="avatars" id="roster-B"></div>
-          </div>
+        <div class="group-box">
+          <div class="group-title">GROUP B <span class="pill">1차</span></div>
+          <div class="avatars" id="roster-B"></div>
+        </div>
 
-          <div class="group-box">
-            <div class="group-title">유찰 그룹 <span class="pill">잔여</span></div>
-            <div class="avatars" id="roster-U"></div>
-          </div>
+        <div class="group-box">
+          <div class="group-title">유찰 그룹 <span class="pill">잔여</span></div>
+          <div class="avatars" id="roster-U"></div>
         </div>
       </div>
     </div>
