@@ -15,15 +15,14 @@ import {
   serverTimestamp,
   writeBatch,
   getDoc,
-  setDoc,
 } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
 // ====== CONSTANTS ======
 const ROOM_ID = "room1";
-const AUCTION_SECONDS = 15;
-const BID_STEP = 5;
-const TEAM_START_POINTS = 1000;
-const GROUP_A_MIN_BID = 300;
+const AUCTION_SECONDS = 15;          // 1명당 기본 경매 시간(초)
+const BID_STEP = 5;                  // 5점 단위
+const TEAM_START_POINTS = 1000;      // 각 팀 시작 포인트
+const GROUP_A_MIN_BID = 300;         // A그룹 최소 입찰 300점
 
 // 팀 문서 아이디 & 화면 표시 이름
 const TEAM_IDS = ["leader1", "leader2", "leader3", "leader4"];
@@ -57,32 +56,30 @@ let players = [];
 let teamsById = {};
 let myRole = "viewer";
 let tickTimer = null;
+let localFinalizing = false;   // 타이머에서 finalize 중복 호출 방지
 
 // ====== DOM HELPERS ======
 const $ = (id) => document.getElementById(id);
-
 const normGroup = (g) => String(g || "").trim().toUpperCase();
 
 // ----- 상태 판별 -----
-function isOperator() {
-  return myRole === "operator";
-}
-function getMyTeamId() {
-  return myRole.startsWith("leader") ? myRole : null;
-}
-function isUnsold(p) {
-  return p.status === "unsold" || p.status === "유찰";
-}
-function isAvailable(p) {
-  return (!p.status || p.status === "available") && !p.assignedTeamId && !isUnsold(p);
-}
+const isOperator = () => myRole === "operator";
+const getMyTeamId = () => (myRole.startsWith("leader") ? myRole : null);
+
+const isUnsold = (p) =>
+  p.status === "unsold" || p.status === "유찰";
+
+const isAvailable = (p) =>
+  (!p.status || p.status === "available") &&
+  !p.assignedTeamId &&
+  !isUnsold(p);
 
 // ====== SNAPSHOT LISTENERS ======
 onSnapshot(roomRef, (snap) => {
   roomState = snap.exists() ? { id: snap.id, ...snap.data() } : null;
   renderRoomStatus();
   renderCurrent();
-  startTimerLoop();
+  startTimerLoop();   // roomState 바뀔 때마다 타이머 재시작
 });
 
 onSnapshot(teamsCol, (snap) => {
@@ -297,12 +294,18 @@ function startTimerLoop() {
     const left = Math.max(0, Math.ceil(leftMs / 1000));
     if (tEl) tEl.textContent = left;
 
+    // ⏱ 남은 시간이 0이고 아직 running이면 -> 역할 상관없이 한 번만 finalize
     if (
       left <= 0 &&
       roomState.status === "running" &&
-      isOperator()
+      !localFinalizing
     ) {
-      finalizeCurrentAuction("timeout").catch(console.error);
+      localFinalizing = true;
+      finalizeCurrentAuction("timeout")
+        .catch(console.error)
+        .finally(() => {
+          localFinalizing = false;
+        });
     }
   }, 250);
 }
@@ -409,7 +412,7 @@ async function finalizeCurrentAuction(reason = "sold") {
       const bidderId = r.highestBidderId || null;
 
       if (highestBid > 0 && bidderId) {
-        // 낙찰
+        // ✅ 낙찰
         tx.update(curRef, {
           status: "sold",
           assignedTeamId: bidderId,
@@ -426,7 +429,7 @@ async function finalizeCurrentAuction(reason = "sold") {
           tx.update(teamRef, { pointsRemaining: remain });
         }
       } else {
-        // 유찰
+        // ✅ 유찰
         tx.update(curRef, {
           status: "unsold",
           assignedTeamId: null,
