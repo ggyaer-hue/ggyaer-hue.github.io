@@ -8,8 +8,6 @@ import {
   doc,
   getDocs,
   onSnapshot,
-  query,
-  orderBy,
   runTransaction,
   updateDoc,
   serverTimestamp,
@@ -76,51 +74,83 @@ const isFinishedPlayer = (p) =>
 const isAvailable = (p) => !isFinishedPlayer(p);
 
 // ====== SNAPSHOT LISTENERS ======
-onSnapshot(roomRef, (snap) => {
-  roomState = snap.exists() ? { id: snap.id, ...snap.data() } : null;
-  renderRoomStatus();
-  renderCurrent();
-  startTimerLoop();
-});
+onSnapshot(
+  roomRef,
+  (snap) => {
+    roomState = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+    renderRoomStatus();
+    renderCurrent();
+    startTimerLoop();
+  },
+  (err) => {
+    console.error("[room] snapshot error:", err);
+  }
+);
 
-onSnapshot(teamsCol, (snap) => {
-  teamsById = {};
-  snap.docs.forEach((d) => {
-    teamsById[d.id] = { id: d.id, ...d.data() };
-  });
-  renderTeams();
-});
+onSnapshot(
+  teamsCol,
+  (snap) => {
+    teamsById = {};
+    snap.docs.forEach((d) => {
+      teamsById[d.id] = { id: d.id, ...d.data() };
+    });
+    renderTeams();
+  },
+  (err) => {
+    console.error("[teams] snapshot error:", err);
+  }
+);
 
-onSnapshot(query(playersCol, orderBy("orderIndex")), (snap) => {
-  players = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  console.log("[players] snapshot count:", players.length);
-  renderTeams();
-  renderRosters();
-  renderCurrent();
-});
+// 🔥 여기에서 orderBy 제거하고 players 전체를 단순히 구독
+onSnapshot(
+  playersCol,
+  (snap) => {
+    players = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    console.log("[players] snapshot count:", snap.size);
+    renderTeams();
+    renderRosters();
+    renderCurrent();
+  },
+  (err) => {
+    console.error("[players] snapshot error:", err);
+  }
+);
 
-onSnapshot(query(logsCol, orderBy("createdAt", "asc")), (snap) => {
-  const box = $("bid-log");
-  if (!box) return;
-  box.innerHTML = "";
-  snap.docs.forEach((d) => {
-    const x = d.data();
-    const teamLabel =
-      TEAM_LABEL_BY_ID[x.teamId] ||
-      x.teamLabel ||
-      x.teamName ||
-      x.teamId ||
-      "-";
-    const playerName = x.playerName || x.playerId || "";
-    const amt = x.amount ?? 0;
+onSnapshot(
+  logsCol,
+  (snap) => {
+    const box = $("bid-log");
+    if (!box) return;
+    box.innerHTML = "";
+    snap.docs
+      .sort((a, b) => {
+        // createdAt 순 정렬(클라이언트 정렬 – 순서는 크게 중요 X)
+        const ta = a.data().createdAt?.seconds ?? 0;
+        const tb = b.data().createdAt?.seconds ?? 0;
+        return ta - tb;
+      })
+      .forEach((d) => {
+        const x = d.data();
+        const teamLabel =
+          TEAM_LABEL_BY_ID[x.teamId] ||
+          x.teamLabel ||
+          x.teamName ||
+          x.teamId ||
+          "-";
+        const playerName = x.playerName || x.playerId || "";
+        const amt = x.amount ?? 0;
 
-    const row = document.createElement("div");
-    row.className = "item";
-    row.textContent = `${teamLabel} - ${playerName} : ${amt}점`;
-    box.appendChild(row);
-  });
-  box.scrollTop = box.scrollHeight;
-});
+        const row = document.createElement("div");
+        row.className = "item";
+        row.textContent = `${teamLabel} - ${playerName} : ${amt}점`;
+        box.appendChild(row);
+      });
+    box.scrollTop = box.scrollHeight;
+  },
+  (err) => {
+    console.error("[logs] snapshot error:", err);
+  }
+);
 
 // ====== RENDER FUNCTIONS ======
 function renderRoomStatus() {
