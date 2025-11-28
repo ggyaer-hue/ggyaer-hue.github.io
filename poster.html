@@ -30,8 +30,8 @@
 
     /* 실제 포스터 영역 (A3 비율 느낌) */
     .poster {
-      width: 1200px;          /* 화면에서 보이는 크기 */
-      aspect-ratio: 707 / 1000; /* A3 비율 비슷하게 */
+      width: 1200px;
+      aspect-ratio: 707 / 1000;
       background: linear-gradient(145deg, #141326, #050309);
       border-radius: 24px;
       padding: 32px 40px;
@@ -42,7 +42,6 @@
       overflow: hidden;
     }
 
-    /* 상단 그라데이션 라인 */
     .poster::before {
       content: "";
       position: absolute;
@@ -138,7 +137,6 @@
       align-items: center;
     }
 
-    /* 카드 상단 조그만 네온라인 */
     .player-card::before {
       content: "";
       position: absolute;
@@ -221,7 +219,6 @@
       font-weight: 600;
     }
 
-    /* 인쇄용 (배경 색 유지) */
     @media print {
       body {
         background: #000;
@@ -255,48 +252,175 @@
 
       <!-- 플레어 그리드 -->
       <section class="players-grid">
-        <!-- ⚠️ 여기부터 카드 21개. 이미지 경로/닉네임/소개만 바꿔서 쓰면 됨 -->
+        <!-- 1 ~ 21번까지 player01 ~ player21 사용 -->
 
-        <!-- 1번 플레어 예시 -->
         <article class="player-card">
           <div class="player-img-wrap">
-            <!-- 실제 파일 경로로 수정: 예) ./assets/flare01.png -->
-            <img src="./assets/flare01.png" alt="플레어1">
+            <img src="./assets/player01.png" alt="플레어1">
           </div>
           <div class="player-name">플레어 닉네임 1</div>
           <div class="player-meta">포지션 / 키워드 한 줄</div>
         </article>
 
-        <!-- 2번 플레어 -->
         <article class="player-card">
           <div class="player-img-wrap">
-            <img src="./assets/flare02.png" alt="플레어2">
+            <img src="./assets/player02.png" alt="플레어2">
           </div>
           <div class="player-name">플레어 닉네임 2</div>
           <div class="player-meta">포지션 / 키워드 한 줄</div>
         </article>
 
-        <!-- 3번 플레어 -->
         <article class="player-card">
           <div class="player-img-wrap">
-            <img src="./assets/flare03.png" alt="플레어3">
+            <img src="./assets/player03.png" alt="플레어3">
           </div>
           <div class="player-name">플레어 닉네임 3</div>
           <div class="player-meta">포지션 / 키워드 한 줄</div>
         </article>
 
-        <!-- TODO: 동일 패턴으로 21번까지 복사해서 사용 -->
-        <!-- 4 ~ 21 번 카드들 쭉 추가하기 -->
-        <!--
         <article class="player-card">
           <div class="player-img-wrap">
-            <img src="./assets/flare04.png" alt="플레어4">
+            <img src="./assets/player04.png" alt="플레어4">
           </div>
           <div class="player-name">플레어 닉네임 4</div>
           <div class="player-meta">포지션 / 키워드 한 줄</div>
         </article>
-        ...
-        -->
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player05.png" alt="플레어5">
+          </div>
+          <div class="player-name">플레어 닉네임 5</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player06.png" alt="플레어6">
+          </div>
+          <div class="player-name">플레어 닉네임 6</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player07.png" alt="플레어7">
+          </div>
+          <div class="player-name">플레어 닉네임 7</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player08.png" alt="플레어8">
+          </div>
+          <div class="player-name">플레어 닉네임 8</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player09.png" alt="플레어9">
+          </div>
+          <div class="player-name">플레어 닉네임 9</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player10.png" alt="플레어10">
+          </div>
+          <div class="player-name">플레어 닉네임 10</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player11.png" alt="플레어11">
+          </div>
+          <div class="player-name">플레어 닉네임 11</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player12.png" alt="플레어12">
+          </div>
+          <div class="player-name">플레어 닉네임 12</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player13.png" alt="플레어13">
+          </div>
+          <div class="player-name">플레어 닉네임 13</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player14.png" alt="플레어14">
+          </div>
+          <div class="player-name">플레어 닉네임 14</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player15.png" alt="플레어15">
+          </div>
+          <div class="player-name">플레어 닉네임 15</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player16.png" alt="플레어16">
+          </div>
+          <div class="player-name">플레어 닉네임 16</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player17.png" alt="플레어17">
+          </div>
+          <div class="player-name">플레어 닉네임 17</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player18.png" alt="플레어18">
+          </div>
+          <div class="player-name">플레어 닉네임 18</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player19.png" alt="플레어19">
+          </div>
+          <div class="player-name">플레어 닉네임 19</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player20.png" alt="플레어20">
+          </div>
+          <div class="player-name">플레어 닉네임 20</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/player21.png" alt="플레어21">
+          </div>
+          <div class="player-name">플레어 닉네임 21</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
       </section>
 
       <!-- 하단 푸터 -->
