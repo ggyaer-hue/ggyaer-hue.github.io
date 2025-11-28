@@ -66,13 +66,17 @@ const normGroup = (g) => String(g || "").trim().toUpperCase();
 const isOperator = () => myRole === "operator";
 const getMyTeamId = () => (myRole.startsWith("leader") ? myRole : null);
 
+// 유찰 여부
 const isUnsold = (p) =>
   p.status === "unsold" || p.status === "유찰";
 
-const isAvailable = (p) =>
-  (!p.status || p.status === "available") &&
-  !p.assignedTeamId &&
-  !isUnsold(p);
+// 더 이상 경매 대상이 아닌가? (팀에 갔거나 유찰이면 true)
+const isFinishedPlayer = (p) =>
+  !!p.assignedTeamId || isUnsold(p);
+
+// 아직 경매 대상에 남아 있는 선수인가?
+const isAvailable = (p) => !isFinishedPlayer(p);
+
 
 // ====== SNAPSHOT LISTENERS ======
 onSnapshot(roomRef, (snap) => {
