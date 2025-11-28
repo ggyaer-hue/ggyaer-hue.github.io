@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>플레어 드래프트 포스터</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- 웹폰트 (원하면 다른 폰트로 교체 가능) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Pretendard', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at top, #3b2b77 0%, #05020a 45%, #020207 100%);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    /* 실제 포스터 영역 (A3 비율 느낌) */
+    .poster {
+      width: 1200px;          /* 화면에서 보이는 크기 */
+      aspect-ratio: 707 / 1000; /* A3 비율 비슷하게 */
+      background: linear-gradient(145deg, #141326, #050309);
+      border-radius: 24px;
+      padding: 32px 40px;
+      box-shadow:
+        0 0 40px rgba(0,0,0,0.8),
+        0 0 80px rgba(137, 90, 255, 0.25);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* 상단 그라데이션 라인 */
+    .poster::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 10% 0%, rgba(155, 126, 255, 0.25) 0, transparent 40%),
+        radial-gradient(circle at 90% 0%, rgba(0, 255, 255, 0.15) 0, transparent 45%);
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .poster-inner {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    /* 헤더 영역 */
+    .poster-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .poster-tagline {
+      font-size: 16px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: #a29bff;
+      margin-bottom: 8px;
+    }
+
+    .poster-title {
+      font-size: 44px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .poster-title span.highlight {
+      background: linear-gradient(120deg, #ff8a3d, #ffd75b, #00f7ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .poster-subtitle {
+      font-size: 18px;
+      color: #d8d8ff;
+      opacity: 0.95;
+    }
+
+    /* 날짜/정보 라인 */
+    .poster-meta {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      font-size: 14px;
+      color: #b3b3ff;
+      margin-bottom: 20px;
+    }
+
+    .meta-pill {
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(162, 155, 255, 0.35);
+      background: radial-gradient(circle at top, rgba(148, 94, 255, 0.25), transparent 60%);
+    }
+
+    /* 플레어 그리드 */
+    .players-grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(7, 1fr); /* 3 x 7 = 21명 */
+      gap: 10px;
+      margin-top: 8px;
+      margin-bottom: 14px;
+    }
+
+    .player-card {
+      position: relative;
+      background: rgba(10, 8, 25, 0.96);
+      border-radius: 14px;
+      padding: 6px 6px 8px;
+      overflow: hidden;
+      box-shadow:
+        0 0 0 1px rgba(146, 130, 255, 0.1),
+        0 8px 18px rgba(0, 0, 0, 0.55);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* 카드 상단 조그만 네온라인 */
+    .player-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 10%;
+      right: 10%;
+      height: 3px;
+      background: linear-gradient(90deg, #ff8a3d, #ffd75b, #00f7ff);
+      opacity: 0.85;
+    }
+
+    .player-img-wrap {
+      width: 100%;
+      aspect-ratio: 3 / 4;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #05030e;
+      margin-top: 6px;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .player-img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .player-name {
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      margin-top: 2px;
+      color: #f6f4ff;
+      text-shadow: 0 0 6px rgba(0,0,0,0.7);
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .player-meta {
+      font-size: 11px;
+      text-align: center;
+      color: #a09bd4;
+      opacity: 0.9;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* 하단 정보 영역 */
+    .poster-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #9f9aca;
+      padding-top: 8px;
+      border-top: 1px solid rgba(112, 103, 214, 0.4);
+      margin-top: 4px;
+    }
+
+    .poster-footer-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .poster-footer-right {
+      text-align: right;
+    }
+
+    .footer-highlight {
+      color: #ffd75b;
+      font-weight: 600;
+    }
+
+    /* 인쇄용 (배경 색 유지) */
+    @media print {
+      body {
+        background: #000;
+      }
+      .poster {
+        box-shadow: none;
+        margin: 0 auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="poster">
+    <div class="poster-inner">
+      <!-- 헤더 -->
+      <header class="poster-header">
+        <div class="poster-tagline">TEAM DRAFT AUCTION</div>
+        <h1 class="poster-title">
+          <span class="highlight">플레어 21</span> 드래프트
+        </h1>
+        <p class="poster-subtitle">
+          치지직 스타일 방송형 경매로 꾸며지는 한 번뿐인 팀 드래프트 쇼
+        </p>
+      </header>
+
+      <!-- 날짜 / 정보 -->
+      <section class="poster-meta">
+        <div class="meta-pill">2025. 12. 00 (토) 20:00 LIVE</div>
+        <div class="meta-pill">총 21명 플레어 · 실시간 경매 진행</div>
+      </section>
+
+      <!-- 플레어 그리드 -->
+      <section class="players-grid">
+        <!-- ⚠️ 여기부터 카드 21개. 이미지 경로/닉네임/소개만 바꿔서 쓰면 됨 -->
+
+        <!-- 1번 플레어 예시 -->
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <!-- 실제 파일 경로로 수정: 예) ./assets/flare01.png -->
+            <img src="./assets/flare01.png" alt="플레어1">
+          </div>
+          <div class="player-name">플레어 닉네임 1</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <!-- 2번 플레어 -->
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/flare02.png" alt="플레어2">
+          </div>
+          <div class="player-name">플레어 닉네임 2</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <!-- 3번 플레어 -->
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/flare03.png" alt="플레어3">
+          </div>
+          <div class="player-name">플레어 닉네임 3</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+
+        <!-- TODO: 동일 패턴으로 21번까지 복사해서 사용 -->
+        <!-- 4 ~ 21 번 카드들 쭉 추가하기 -->
+        <!--
+        <article class="player-card">
+          <div class="player-img-wrap">
+            <img src="./assets/flare04.png" alt="플레어4">
+          </div>
+          <div class="player-name">플레어 닉네임 4</div>
+          <div class="player-meta">포지션 / 키워드 한 줄</div>
+        </article>
+        ...
+        -->
+      </section>
+
+      <!-- 하단 푸터 -->
+      <footer class="poster-footer">
+        <div class="poster-footer-left">
+          <span>기획 · 주최 : <span class="footer-highlight">GGYAER HUE AUCTION CREW</span></span>
+          <span>진행 : 팀장 4인 &amp; 운영진</span>
+        </div>
+        <div class="poster-footer-right">
+          <span>LIVE on</span><br />
+          <span class="footer-highlight">Chzzk / Twitch / YouTube</span>
+        </div>
+      </footer>
+    </div>
+  </div>
+</body>
+</html>
