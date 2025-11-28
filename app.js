@@ -44,7 +44,7 @@ const TEAM_LABEL_BY_ID = {
 };
 
 // ====== FIRESTORE REFS ======
-const roomRef   = doc(db, "rooms", ROOM_ID);
+const roomRef    = doc(db, "rooms", ROOM_ID);
 const playersCol = collection(db, "rooms", ROOM_ID, "players");
 const teamsCol   = collection(db, "rooms", ROOM_ID, "teams");
 const logsCol    = collection(db, "rooms", ROOM_ID, "logs");
@@ -250,12 +250,16 @@ function renderRosters() {
   const sortByOrder = (a, b) =>
     (a.orderIndex ?? 999) - (b.orderIndex ?? 999);
 
+  // A/B는 그룹만 맞으면 전부 표시
   const listA = players
-    .filter((p) => normGroup(p.group) === "A" && isAvailable(p))
+    .filter((p) => normGroup(p.group) === "A")
     .sort(sortByOrder);
+
   const listB = players
-    .filter((p) => normGroup(p.group) === "B" && isAvailable(p))
+    .filter((p) => normGroup(p.group) === "B")
     .sort(sortByOrder);
+
+  // 유찰 그룹은 유찰 + 팀 미배정만
   const listU = players
     .filter((p) => isUnsold(p) && !p.assignedTeamId)
     .sort(sortByOrder);
@@ -264,7 +268,15 @@ function renderRosters() {
 
   const htmlFor = (p) => {
     const cls = ["avatar"];
+
     if (p.id === curId) cls.push("current");
+    if (p.assignedTeamId) {
+      const soldCls = `sold-by-${p.assignedTeamId}`; // sold-by-leader1 ...
+      cls.push(soldCls, "sold");
+    } else if (isUnsold(p)) {
+      cls.push("sold");
+    }
+
     return `
       <div class="${cls.join(" ")}">
         <img src="${p.photoUrl || ""}" alt="${p.name || ""}">
@@ -273,7 +285,6 @@ function renderRosters() {
     `;
   };
 
-  // ❗ 세 박스 중 하나가 없어도 나머지는 그리도록 개별 처리
   if (boxA) boxA.innerHTML = listA.map(htmlFor).join("");
   if (boxB) boxB.innerHTML = listB.map(htmlFor).join("");
   if (boxU) boxU.innerHTML = listU.map(htmlFor).join("");
@@ -294,7 +305,6 @@ function startTimerLoop() {
     const left = Math.max(0, Math.ceil(leftMs / 1000));
     if (tEl) tEl.textContent = left;
 
-    // 남은 시간이 0이고 아직 running이면 -> 역할 상관없이 한 번만 finalize
     if (
       left <= 0 &&
       roomState.status === "running" &&
@@ -393,11 +403,10 @@ async function startRemainingAuction() {
   });
 }
 
-// ❗ 모든 read 를 먼저, 그 다음 write
+// read → write 순서 지킨 finalize
 async function finalizeCurrentAuction(reason = "sold") {
   try {
     await runTransaction(db, async (tx) => {
-      // 1) room 읽기
       const roomSnap = await tx.get(roomRef);
       if (!roomSnap.exists()) throw new Error("room missing");
       const r = roomSnap.data();
@@ -405,7 +414,6 @@ async function finalizeCurrentAuction(reason = "sold") {
       const curId = r.currentPlayerId;
       if (!curId) return;
 
-      // 2) 현재 선수 읽기
       const curRef = doc(playersCol, curId);
       const curSnap = await tx.get(curRef);
       if (!curSnap.exists()) return;
@@ -414,7 +422,6 @@ async function finalizeCurrentAuction(reason = "sold") {
       const highestBid = r.highestBid ?? 0;
       const bidderId = r.highestBidderId || null;
 
-      // 3) 팀이 필요하다면 팀도 미리 읽기
       let teamRef = null;
       let teamData = null;
       if (highestBid > 0 && bidderId) {
@@ -425,10 +432,8 @@ async function finalizeCurrentAuction(reason = "sold") {
         }
       }
 
-      // ===== 여기부터는 write만 =====
-
+      // --- write only ---
       if (highestBid > 0 && bidderId) {
-        // 낙찰 처리
         tx.update(curRef, {
           status: "sold",
           assignedTeamId: bidderId,
@@ -442,7 +447,6 @@ async function finalizeCurrentAuction(reason = "sold") {
           tx.update(teamRef, { pointsRemaining: remain });
         }
       } else {
-        // 유찰 처리
         tx.update(curRef, {
           status: "unsold",
           assignedTeamId: null,
@@ -451,7 +455,6 @@ async function finalizeCurrentAuction(reason = "sold") {
         });
       }
 
-      // 다음 선수 선택 (클라이언트 players 배열만 사용)
       let nextPlayer = null;
       if (r.remainingMode) {
         nextPlayer = getNextUnsoldPlayer(curId);
@@ -460,7 +463,6 @@ async function finalizeCurrentAuction(reason = "sold") {
       }
 
       if (!nextPlayer) {
-        // 더 이상 경매할 선수가 없음
         tx.update(roomRef, {
           status: "finished",
           currentPlayerId: null,
@@ -471,7 +473,6 @@ async function finalizeCurrentAuction(reason = "sold") {
           endsAtMs: null,
         });
       } else {
-        // 다음 선수로 이동
         tx.update(roomRef, {
           status: "running",
           currentPlayerId: nextPlayer.id,
@@ -499,7 +500,6 @@ async function resetAll() {
 
   const batch = writeBatch(db);
 
-  // 플레이어 리셋
   const pSnap = await getDocs(playersCol);
   pSnap.forEach((d) => {
     batch.update(d.ref, {
@@ -510,13 +510,11 @@ async function resetAll() {
     });
   });
 
-  // 팀 포인트 리셋
   const tSnap = await getDocs(teamsCol);
   tSnap.forEach((d) => {
     batch.update(d.ref, { pointsRemaining: TEAM_START_POINTS });
   });
 
-  // room 리셋
   batch.update(roomRef, {
     status: "waiting",
     remainingMode: false,
@@ -530,7 +528,6 @@ async function resetAll() {
 
   await batch.commit();
 
-  // 로그 삭제
   const logSnap = await getDocs(logsCol);
   const batch2 = writeBatch(db);
   logSnap.forEach((d) => batch2.delete(d.ref));
@@ -578,7 +575,6 @@ async function placeBid() {
         throw new Error(`최소 ${BID_STEP}점 이상 올려야 합니다.`);
       }
 
-      // GROUP A 최소 입찰 (잔여 재경매 모드가 아닐 때만)
       const g = normGroup(cur.group);
       if (!r.remainingMode && g === "A" && amount < GROUP_A_MIN_BID) {
         throw new Error(
@@ -586,7 +582,6 @@ async function placeBid() {
         );
       }
 
-      // 팀 포인트 확인
       const teamRef = doc(teamsCol, teamId);
       const teamSnap = await tx.get(teamRef);
       if (!teamSnap.exists()) throw new Error("팀 정보를 찾을 수 없습니다.");
@@ -599,7 +594,6 @@ async function placeBid() {
       const teamLabel =
         TEAM_LABEL_BY_ID[teamId] || t.name || teamId;
 
-      // room 최고 입찰 갱신 (write)
       tx.update(roomRef, {
         highestBid: amount,
         highestBidderId: teamId,
@@ -607,7 +601,6 @@ async function placeBid() {
         lastBidAtMs: Date.now(),
       });
 
-      // 로그 기록 (write)
       const logRef = doc(logsCol);
       tx.set(logRef, {
         createdAt: serverTimestamp(),
