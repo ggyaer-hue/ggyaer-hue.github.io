@@ -338,6 +338,7 @@ function startTimerLoop() {
     if (
       left <= 0 &&
       roomState.status === "running" &&
+      isOperator() &&     // ✅ 운영자 화면에서만 타임아웃 처리
       !localFinalizing
     ) {
       localFinalizing = true;
@@ -347,8 +348,6 @@ function startTimerLoop() {
           localFinalizing = false;
         });
     }
-  }, 250);
-}
 
 // ====== NEXT PLAYER HELPERS ======
 function sortedMainPlayers() {
