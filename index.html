@@ -301,13 +301,15 @@
       min-height:0; height:100%;
     }
     
-   .roster-grid{
+.roster-grid{
   display:grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)); /* ✅ A / B / 유찰 가로 3칸 */
+  grid-template-columns: 1fr;      /* ✅ 세로로 한 줄 */
+  grid-auto-rows: minmax(0, 1fr);  /* 박스 3개가 위→아래로 쭉 */
   gap:8px;
   min-height:0;
   height:100%;
 }
+
     
     }
     .group-box{
@@ -506,5 +508,6 @@
   <script type="module" src="./app.js"></script>
 </body>
 </html>
+
 
 
